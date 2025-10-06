@@ -1,33 +1,116 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Calculator, TrendingUp, Home, DollarSign, Info } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { Calculator, TrendingUp, Home, DollarSign, Info, Settings, HelpCircle } from 'lucide-react';
 
 const FinancialAnalyzer = () => {
   const [params, setParams] = useState({
-    housePrice: 300000,
+    // Property parameters
+    housePrice: 335000,
     downPaymentPercent: 20,
     mortgageRate: 5.0,
     loanTermYears: 30,
-    propertyTaxRate: 1.5,
-    homeInsurance: 100,
+    propertyTaxRate: 1.9,
+    homeInsurance: 417,
     hoaFees: 100,
-    homeAppreciation: 3.0,
+    homeAppreciation: 4.0,
     maintenancePercent: 1.0,
-    monthlyRent: 2500,
-    vacancyRate: 5,
-    propertyManagementPercent: 10,
+    
+    // PMI
+    pmiRate: 0.5,
+    pmiThreshold: 20,
+    
+    // Rental parameters
+    useRentPercentage: true,
+    rentPercentage: 8.0,
+    monthlyRentFixed: 2400,
+    vacancyRate: 7,
+    propertyManagementPercent: 8,
     rentGrowth: 3.0,
+    landlordInsurancePremium: 20,
+    maintenanceRental: 3.0,
+    capexReserve: 8.0,
+    turnoverCostMonths: 2,
+    avgTenancyYears: 3,
+    
+    // Stock investment
     stockReturn: 7.5,
+    dividendYield: 2.0,
+    dividendsReinvested: true,
+    
+    // Recurring contributions
+    enableRecurringContributions: false,
+    contributionAmount: 500,
+    contributionFrequency: 'monthly',
+    
+    // Timeline
     yearsToAnalyze: 35,
-    initialCash: 60000
+    initialCash: 67000,
+
+    // Tax parameters
+    enableTaxBenefits: false,
+    marginalTaxRate: 24,
+    standardDeduction: 29200, // 2024 married filing jointly
+    itemizedDeductions: 0,
+    landValuePercent: 20,
   });
 
   const [showExplanations, setShowExplanations] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [hoveredTooltip, setHoveredTooltip] = useState(null);
+
+  const paramDefinitions = {
+    housePrice: "The purchase price of the property you're considering buying.",
+    downPaymentPercent: "The percentage of the house price you'll pay upfront. Higher down payments mean lower monthly mortgage payments and no PMI above 20%.",
+    mortgageRate: "The annual interest rate on your home loan. This significantly impacts your monthly payment and total interest paid.",
+    loanTermYears: "The number of years over which you'll repay the mortgage. Common terms are 15 or 30 years.",
+    propertyTaxRate: "Annual property tax as a percentage of home value. This varies by location and is typically 0.3% to 2.5%.",
+    homeInsurance: "Monthly cost to insure your home against damage, theft, and liability. Required by most lenders.",
+    hoaFees: "Homeowners Association monthly fees for shared amenities and maintenance in planned communities or condos.",
+    maintenancePercent: "Annual maintenance costs as a percentage of home value. Rule of thumb is 1% per year for routine upkeep.",
+    homeAppreciation: "Expected annual increase in home value. Historical average is 3-6% but varies significantly by location.",
+    pmiRate: "Private Mortgage Insurance annual cost as percentage of loan amount. Required when down payment is less than 20%.",
+    pmiThreshold: "The equity percentage at which PMI is removed. Typically 20% equity.",
+    rentPercentage: "Annual gross rent as a percentage of home value. The '1% rule' suggests monthly rent should be 1% of purchase price (12% annually).",
+    monthlyRentFixed: "Fixed monthly rent amount you expect to charge tenants.",
+    vacancyRate: "Percentage of time the property sits empty between tenants. National average is 6-7%.",
+    propertyManagementPercent: "Fee charged by property managers as percentage of monthly rent. Typical range is 8-12%.",
+    rentGrowth: "Expected annual increase in rental rates. Often tracks with inflation (2-4%).",
+    landlordInsurancePremium: "Additional cost for landlord insurance compared to homeowner insurance. Typically 15-25% more.",
+    maintenanceRental: "Monthly maintenance reserve as percentage of rent. Landlords typically budget 3-5% of rent.",
+    capexReserve: "Capital Expenditure reserve for major repairs (roof, HVAC, appliances) as percentage of rent. Industry standard is 8-10%.",
+    turnoverCostMonths: "Cost to prepare property for new tenant (cleaning, repairs, lost rent) measured in months of rent. Typically 1-2 months.",
+    avgTenancyYears: "Average number of years a tenant stays before moving. Longer tenancy means lower turnover costs.",
+    stockReturn: "Expected annual return from stock market investments. Historical S&P 500 average is 7-8% after inflation.",
+    dividendYield: "Annual dividend income as percentage of stock value. S&P 500 currently yields about 1.5-2%.",
+    dividendsReinvested: "Whether dividend payments are used to buy more stock (compounding) or taken as cash income.",
+    initialCash: "Total cash available for down payment and/or investment. Money not used for down payment goes into stocks.",
+    yearsToAnalyze: "Time horizon for comparing strategies. Longer periods favor appreciation and compound growth.",
+    contributionAmount: "Regular additional investment into stocks. Enables dollar-cost averaging strategy.",
+    marginalTaxRate: "Your top tax bracket percentage. Used to calculate tax benefits from mortgage interest deduction and rental deductions.",
+    standardDeduction: "IRS standard deduction amount. Itemized deductions (like mortgage interest) only help if they exceed this.",
+    landValuePercent: "Portion of property value attributed to land (which doesn't depreciate). Building portion can be depreciated over 27.5 years for rentals."
+  };
+
+  const InfoTooltip = ({ param }) => (
+    <div className="relative inline-block">
+      <HelpCircle 
+        className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help ml-1 inline-block"
+        onMouseEnter={() => setHoveredTooltip(param)}
+        onMouseLeave={() => setHoveredTooltip(null)}
+      />
+      {hoveredTooltip === param && (
+        <div className="absolute z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl -top-2 left-6">
+          <div className="absolute w-2 h-2 bg-gray-900 transform rotate-45 -left-1 top-3"></div>
+          {paramDefinitions[param]}
+        </div>
+      )}
+    </div>
+  );
 
   const updateParam = (key, value) => {
-    setParams(prev => ({ ...prev, [key]: parseFloat(value) || 0 }));
+    setParams(prev => ({ ...prev, [key]: typeof value === 'boolean' ? value : (parseFloat(value) || 0) }));
   };
 
   const calculateMortgagePayment = (principal, annualRate, years) => {
@@ -52,66 +135,188 @@ const FinancialAnalyzer = () => {
     const monthlyMortgage = calculateMortgagePayment(loanAmount, params.mortgageRate, params.loanTermYears);
     const monthlyPropertyTax = (params.housePrice * (params.propertyTaxRate / 100)) / 12;
     const monthlyMaintenance = (params.housePrice * (params.maintenancePercent / 100)) / 12;
+    
+    const needsPMI = params.downPaymentPercent < params.pmiThreshold;
+    const monthlyPMI = needsPMI ? (loanAmount * (params.pmiRate / 100)) / 12 : 0;
 
     const results = {
       buyToLive: [],
       buyToRent: [],
-      stocksOnly: []
+      stocksOnly: [],
+      stocksWithContributions: []
     };
+
+    let cumulativeTaxBenefitsLive = 0;
+    let cumulativeTaxBenefitsRent = 0;
 
     for (let year = 0; year <= params.yearsToAnalyze; year++) {
       const month = year * 12;
       const homeValue = params.housePrice * Math.pow(1 + params.homeAppreciation / 100, year);
-      const remainingMortgage = calculateRemainingBalance(
-        loanAmount, 
-        params.mortgageRate, 
-        params.loanTermYears * 12, 
-        month
-      );
+      const remainingMortgage = calculateRemainingBalance(loanAmount, params.mortgageRate, params.loanTermYears * 12, month);
+      
+      const equityPercent = ((homeValue - remainingMortgage) / homeValue) * 100;
+      const currentPMI = (needsPMI && equityPercent < params.pmiThreshold) ? monthlyPMI : 0;
 
+      // TAX BENEFITS CALCULATION
+      let taxBenefitLive = 0;
+      let taxBenefitRent = 0;
+
+      if (params.enableTaxBenefits && year > 0) {
+        // BUY TO LIVE: Mortgage Interest Deduction
+        const principalPaidLive = loanAmount - remainingMortgage - 
+            calculateRemainingBalance(loanAmount, params.mortgageRate, params.loanTermYears * 12, (year - 1) * 12);
+        const interestPaidLive = (monthlyMortgage * 12) - principalPaidLive;
+        const propertyTaxAnnual = monthlyPropertyTax * 12;
+        const totalItemized = interestPaidLive + propertyTaxAnnual;
+        
+        if (totalItemized > params.standardDeduction) {
+            taxBenefitLive = (totalItemized - params.standardDeduction) * (params.marginalTaxRate / 100);
+        }
+        
+        // BUY TO RENT: Depreciation + Expense Deductions
+        const buildingValue = params.housePrice * (1 - params.landValuePercent / 100);
+        const annualDepreciation = buildingValue / 27.5;
+        
+        const annualRentalIncome = netMonthlyRent * 12;
+        const annualRentalExpenses = monthlyExpenses * 12;
+        const netRentalIncome = annualRentalIncome - annualRentalExpenses - annualDepreciation;
+    
+        if (netRentalIncome < 0) {
+            taxBenefitRent = Math.min(Math.abs(netRentalIncome), 25000) * (params.marginalTaxRate / 100);
+        } else {
+            taxBenefitRent = annualDepreciation * (params.marginalTaxRate / 100);
+        }
+      }
+
+      cumulativeTaxBenefitsLive += taxBenefitLive;
+      cumulativeTaxBenefitsRent += taxBenefitRent;
+
+      // BUY TO LIVE
       const homeEquityLive = homeValue - remainingMortgage;
-      const monthlyHousingCost = monthlyMortgage + monthlyPropertyTax + 
+      const monthlyHousingCost = monthlyMortgage + currentPMI + monthlyPropertyTax + 
                                 params.homeInsurance + params.hoaFees + monthlyMaintenance;
-      const totalHousingCostPaid = year > 0 ? 
-        (monthlyHousingCost * Math.min(month, params.loanTermYears * 12)) : 0;
 
-      const initialStockInvestment = params.initialCash - downPayment;
-      const stockValueLive = initialStockInvestment * Math.pow(1 + params.stockReturn / 100, year);
-      
-      const netWorthLive = homeEquityLive + stockValueLive;
+      const initialStockInvestmentLive = params.initialCash - downPayment;
+      const stockValueLive = initialStockInvestmentLive * Math.pow(1 + params.stockReturn / 100, year);
+      const netWorthLive = homeEquityLive + stockValueLive + cumulativeTaxBenefitsLive;
 
+
+      // BUY TO RENT
       const homeEquityRent = homeValue - remainingMortgage;
-      const monthlyRentIncome = params.monthlyRent * Math.pow(1 + params.rentGrowth / 100, year);
-      const effectiveRent = monthlyRentIncome * (1 - params.vacancyRate / 100);
-      const propertyManagementFee = effectiveRent * (params.propertyManagementPercent / 100);
-      const netMonthlyRent = effectiveRent - propertyManagementFee;
+      const monthlyRent = params.useRentPercentage ? 
+        (params.housePrice * (params.rentPercentage / 100) / 12) * Math.pow(1 + params.rentGrowth / 100, year) :
+        params.monthlyRentFixed * Math.pow(1 + params.rentGrowth / 100, year);
       
-      const monthlyExpenses = monthlyMortgage + monthlyPropertyTax + 
-                             params.homeInsurance + params.hoaFees + monthlyMaintenance;
+      const effectiveRent = monthlyRent * (1 - params.vacancyRate / 100);
+      const propertyManagementFee = effectiveRent * (params.propertyManagementPercent / 100);
+      
+      const landlordInsurance = params.homeInsurance * (1 + params.landlordInsurancePremium / 100);
+      const rentalMaintenance = monthlyRent * (params.maintenanceRental / 100);
+      const capexReserve = monthlyRent * (params.capexReserve / 100);
+      
+      const monthlyExpenses = monthlyMortgage + currentPMI + monthlyPropertyTax + 
+                             landlordInsurance + params.hoaFees + rentalMaintenance + capexReserve;
+      
+      const netMonthlyRent = effectiveRent - propertyManagementFee;
       const monthlyCashFlow = netMonthlyRent - monthlyExpenses;
       
       let rentalProfitsInvested = 0;
+      let turnoverCosts = 0;
+      
       if (year > 0) {
         for (let y = 1; y <= year; y++) {
-          const rentAtYear = params.monthlyRent * Math.pow(1 + params.rentGrowth / 100, y);
+          const rentAtYear = params.useRentPercentage ?
+            (params.housePrice * (params.rentPercentage / 100) / 12) * Math.pow(1 + params.rentGrowth / 100, y) :
+            params.monthlyRentFixed * Math.pow(1 + params.rentGrowth / 100, y);
+          
           const effectiveRentAtYear = rentAtYear * (1 - params.vacancyRate / 100);
           const managementAtYear = effectiveRentAtYear * (params.propertyManagementPercent / 100);
           const netRentAtYear = effectiveRentAtYear - managementAtYear;
-          const cashFlowAtYear = (netRentAtYear - monthlyExpenses) * 12;
           
-          const yearsOfGrowth = year - y;
-          rentalProfitsInvested += cashFlowAtYear * Math.pow(1 + params.stockReturn / 100, yearsOfGrowth);
+          const maintenanceAtYear = rentAtYear * (params.maintenanceRental / 100);
+          const capexAtYear = rentAtYear * (params.capexReserve / 100);
+          const expensesAtYear = monthlyMortgage + monthlyPropertyTax + landlordInsurance + 
+                                params.hoaFees + maintenanceAtYear + capexAtYear;
+          
+          const cashFlowAtYear = (netRentAtYear - expensesAtYear) * 12;
+          
+          const annualizedTurnoverCost = (rentAtYear * params.turnoverCostMonths) / params.avgTenancyYears;
+
+        const yearsOfGrowth = year - y;
+        const profitAfterTurnover = cashFlowAtYear - annualizedTurnoverCost;
+        rentalProfitsInvested += profitAfterTurnover * Math.pow(1 + params.stockReturn / 100, yearsOfGrowth);
         }
       }
       
       const initialStockInvestmentRent = params.initialCash - downPayment;
       const stockValueRent = initialStockInvestmentRent * Math.pow(1 + params.stockReturn / 100, year);
       const totalStocksRent = stockValueRent + rentalProfitsInvested;
-      
-      const netWorthRent = homeEquityRent + totalStocksRent;
+      const netWorthRent = homeEquityRent + totalStocksRent + cumulativeTaxBenefitsRent;
 
-      const stockValueOnly = params.initialCash * Math.pow(1 + params.stockReturn / 100, year);
-      const netWorthStocks = stockValueOnly;
+      // STOCKS ONLY (no contributions)
+      const totalStockReturn = params.stockReturn / 100;
+      const stockValueOnly = params.initialCash * Math.pow(1 + totalStockReturn, year);
+      
+      let dividendsAccumulated = 0;
+      let annualDividendIncome = 0;
+
+      if (params.dividendYield > 0 && year > 0) {
+        for (let y = 1; y <= year; y++) {
+          const portfolioValueAtYear = params.initialCash * Math.pow(1 + totalStockReturn, y);
+          const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
+          const yearsToGrow = year - y;
+          
+          if (params.dividendsReinvested) {
+            dividendsAccumulated += dividendAtYear * Math.pow(1 + totalStockReturn, yearsToGrow);
+          } else {
+            dividendsAccumulated += dividendAtYear;
+          }
+
+          if (y === year) {
+            annualDividendIncome = dividendAtYear;
+          }
+        }
+      }
+      
+      const netWorthStocks = stockValueOnly + dividendsAccumulated;
+      const monthlyCashFlowStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 0;
+
+      // STOCKS WITH CONTRIBUTIONS
+      let stockValueWithContributions = params.initialCash * Math.pow(1 + totalStockReturn, year);
+      let contributionsAccumulated = 0;
+      
+      if (params.enableRecurringContributions && year > 0) {
+        const contributionsPerYear = params.contributionFrequency === 'monthly' ? 
+          params.contributionAmount * 12 : params.contributionAmount;
+        
+        for (let y = 1; y <= year; y++) {
+          const yearsToGrow = year - y;
+          contributionsAccumulated += contributionsPerYear * Math.pow(1 + totalStockReturn, yearsToGrow);
+        }
+      }
+      
+      let dividendsWithContributions = 0;
+      if (params.dividendYield > 0 && year > 0) {
+        for (let y = 1; y <= year; y++) {
+          const contributionsSoFar = params.enableRecurringContributions ? 
+            (params.contributionFrequency === 'monthly' ? params.contributionAmount * 12 : params.contributionAmount) * y : 0;
+          
+          const baseValueAtYear = params.initialCash * Math.pow(1 + totalStockReturn, y);
+          const contributionsToYear = contributionsSoFar * Math.pow(1 + totalStockReturn, y - Math.floor(y/2)); // Approximate mid-year
+          const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
+
+          const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
+          const yearsToGrow = year - y;
+          
+          if (params.dividendsReinvested) {
+            dividendsWithContributions += dividendAtYear * Math.pow(1 + totalStockReturn, yearsToGrow);
+          } else {
+            dividendsWithContributions += dividendAtYear;
+          }
+        }
+      }
+      
+      const netWorthStocksWithContributions = stockValueWithContributions + contributionsAccumulated + dividendsWithContributions;
 
       results.buyToLive.push({
         year,
@@ -121,7 +326,8 @@ const FinancialAnalyzer = () => {
         homeValue,
         remainingMortgage,
         monthlyPayment: monthlyHousingCost,
-        totalCostPaid: downPayment + totalHousingCostPaid
+        monthlyPMI: currentPMI,
+        taxBenefit: taxBenefitLive
       });
 
       results.buyToRent.push({
@@ -129,19 +335,30 @@ const FinancialAnalyzer = () => {
         netWorth: netWorthRent,
         homeEquity: homeEquityRent,
         stockValue: totalStocksRent,
+        rentalProfits: rentalProfitsInvested,
         homeValue,
         remainingMortgage,
         monthlyRent: netMonthlyRent,
         monthlyExpenses,
         monthlyCashFlow,
-        totalCostPaid: downPayment
+        turnoverCosts,
+        taxBenefit: taxBenefitRent
       });
 
       results.stocksOnly.push({
         year,
         netWorth: netWorthStocks,
         stockValue: stockValueOnly,
-        monthlyPayment: 0
+        dividends: dividendsAccumulated,
+        monthlyCashFlow: monthlyCashFlowStocks
+      });
+
+      results.stocksWithContributions.push({
+        year,
+        netWorth: netWorthStocksWithContributions,
+        stockValue: stockValueWithContributions,
+        contributions: contributionsAccumulated,
+        dividends: dividendsWithContributions
       });
     }
 
@@ -153,24 +370,27 @@ const FinancialAnalyzer = () => {
       year: item.year,
       'Buy to Live': Math.round(item.netWorth),
       'Buy to Rent': Math.round(calculations.buyToRent[idx].netWorth),
-      'Stocks Only': Math.round(calculations.stocksOnly[idx].netWorth)
+      'Stocks Only': Math.round(calculations.stocksOnly[idx].netWorth),
+      'Stocks + Contributions': params.enableRecurringContributions ? 
+        Math.round(calculations.stocksWithContributions[idx].netWorth) : null
     }));
-  }, [calculations]);
+  }, [calculations, params.enableRecurringContributions]);
 
   const cashFlowChartData = useMemo(() => {
-    return calculations.buyToLive.slice(0, 36).map((item, idx) => ({
+    return calculations.buyToLive.slice(0, Math.min(36, params.yearsToAnalyze + 1)).map((item, idx) => ({
       year: item.year,
       'Buy to Live': -Math.round(item.monthlyPayment),
       'Buy to Rent': Math.round(calculations.buyToRent[idx].monthlyCashFlow),
-      'Stocks Only': 0
+      'Stocks Only': calculations.stocksOnly[idx].monthlyCashFlow
     }));
-  }, [calculations]);
+  }, [calculations, params.yearsToAnalyze]);
 
   const finalYear = params.yearsToAnalyze;
   const finalResults = {
     buyToLive: calculations.buyToLive[finalYear],
     buyToRent: calculations.buyToRent[finalYear],
-    stocksOnly: calculations.stocksOnly[finalYear]
+    stocksOnly: calculations.stocksOnly[finalYear],
+    stocksWithContributions: calculations.stocksWithContributions[finalYear]
   };
 
   const bestStrategy = Object.keys(finalResults).reduce((best, current) => 
@@ -181,549 +401,1099 @@ const FinancialAnalyzer = () => {
     return value.toLocaleString(undefined, {maximumFractionDigits: 0});
   };
 
+  const formatStrategyName = (name) => {
+    return name.replace(/([A-Z])/g, ' $1').trim()
+      .replace('stocks With Contributions', 'Stocks + Contributions');
+  };
+
+  const monthlyRentCalculated = params.useRentPercentage ?
+    (params.housePrice * (params.rentPercentage / 100) / 12) : params.monthlyRentFixed;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Calculator className="w-10 h-10 text-indigo-600" />
-              <h1 className="text-3xl font-bold text-gray-800">
-                Real Estate vs Stock Investment Analyzer
-              </h1>
-            </div>
-            <button
-              onClick={() => setShowExplanations(!showExplanations)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition"
-            >
-              <Info className="w-4 h-4" />
-              {showExplanations ? 'Hide' : 'Show'} Explanations
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <div className="space-y-4">
-              <h3 className="font-semibold text-lg text-indigo-900 border-b pb-2">Property Parameters</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  House Price ($)
-                </label>
-                <input
-                  type="number"
-                  value={params.housePrice}
-                  onChange={(e) => updateParam('housePrice', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-8 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Calculator className="w-12 h-12" />
+                <div>
+                  <h1 className="text-4xl font-bold">Investment Strategy Calculator</h1>
+                  <p className="text-blue-100 mt-2">Compare Real Estate vs Stock Market Strategies</p>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Down Payment (%)
-                </label>
-                <input
-                  type="number"
-                  value={params.downPaymentPercent}
-                  onChange={(e) => updateParam('downPaymentPercent', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  min="0"
-                  max="100"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mortgage Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.mortgageRate}
-                  onChange={(e) => updateParam('mortgageRate', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Loan Term (Years)
-                </label>
-                <input
-                  type="number"
-                  value={params.loanTermYears}
-                  onChange={(e) => updateParam('loanTermYears', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Tax Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.propertyTaxRate}
-                  onChange={(e) => updateParam('propertyTaxRate', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Home Insurance ($/month)
-                </label>
-                <input
-                  type="number"
-                  value={params.homeInsurance}
-                  onChange={(e) => updateParam('homeInsurance', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  HOA Fees ($/month)
-                </label>
-                <input
-                  type="number"
-                  value={params.hoaFees}
-                  onChange={(e) => updateParam('hoaFees', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Maintenance (% of home value/year)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.maintenancePercent}
-                  onChange={(e) => updateParam('maintenancePercent', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Home Appreciation (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.homeAppreciation}
-                  onChange={(e) => updateParam('homeAppreciation', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="font-semibold text-lg text-green-900 border-b pb-2">Rental Parameters</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Monthly Rent ($/month)
-                </label>
-                <input
-                  type="number"
-                  value={params.monthlyRent}
-                  onChange={(e) => updateParam('monthlyRent', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vacancy Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.vacancyRate}
-                  onChange={(e) => updateParam('vacancyRate', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Management (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.propertyManagementPercent}
-                  onChange={(e) => updateParam('propertyManagementPercent', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Rent Growth (% per year)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.rentGrowth}
-                  onChange={(e) => updateParam('rentGrowth', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="font-semibold text-lg text-purple-900 border-b pb-2">Investment & Timeline</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Stock Market Return (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={params.stockReturn}
-                  onChange={(e) => updateParam('stockReturn', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Initial Cash Available ($)
-                </label>
-                <input
-                  type="number"
-                  value={params.initialCash}
-                  onChange={(e) => updateParam('initialCash', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Years to Analyze
-                </label>
-                <input
-                  type="number"
-                  value={params.yearsToAnalyze}
-                  onChange={(e) => updateParam('yearsToAnalyze', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  min="1"
-                  max="50"
-                />
-              </div>
+              <button
+                onClick={() => setShowExplanations(!showExplanations)}
+                className="flex items-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 rounded-xl transition backdrop-blur-sm"
+              >
+                <Info className="w-5 h-5" />
+                {showExplanations ? 'Hide' : 'Show'} Details
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-xl border-2 border-indigo-200">
-              <div className="flex items-center gap-3 mb-3">
-                <Home className="w-6 h-6 text-indigo-600" />
-                <h3 className="font-semibold text-lg text-indigo-900">Buy to Live</h3>
-              </div>
-              <div className="space-y-2">
-                <p className="text-2xl font-bold text-indigo-900">
-                  ${formatCurrency(finalResults.buyToLive.netWorth)}
-                </p>
-                <p className="text-sm text-gray-600">Final Net Worth</p>
-                <p className="text-sm text-gray-700">
-                  Monthly Cost: ${formatCurrency(finalResults.buyToLive.monthlyPayment)}
-                </p>
-              </div>
+          <div className="p-8">
+            <div className="flex gap-2 mb-8 border-b">
+              {['overview', 'parameters', 'analysis'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-6 py-3 font-medium transition ${
+                    activeTab === tab
+                      ? 'border-b-2 border-indigo-600 text-indigo-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
             </div>
 
-            <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border-2 border-green-200">
-              <div className="flex items-center gap-3 mb-3">
-                <DollarSign className="w-6 h-6 text-green-600" />
-                <h3 className="font-semibold text-lg text-green-900">Buy to Rent</h3>
-              </div>
-              <div className="space-y-2">
-                <p className="text-2xl font-bold text-green-900">
-                  ${formatCurrency(finalResults.buyToRent.netWorth)}
-                </p>
-                <p className="text-sm text-gray-600">Final Net Worth</p>
-                <p className="text-sm text-gray-700">
-                  Monthly Cash Flow: ${formatCurrency(finalResults.buyToRent.monthlyCashFlow)}
-                </p>
-              </div>
-            </div>
+            {activeTab === 'parameters' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg text-indigo-900 border-b-2 border-indigo-200 pb-3">
+                    Property Parameters
+                  </h3>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      House Price ($)
+                      <InfoTooltip param="housePrice" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.housePrice}
+                      onChange={(e) => updateParam('housePrice', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
 
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border-2 border-purple-200">
-              <div className="flex items-center gap-3 mb-3">
-                <TrendingUp className="w-6 h-6 text-purple-600" />
-                <h3 className="font-semibold text-lg text-purple-900">Stocks Only</h3>
-              </div>
-              <div className="space-y-2">
-                <p className="text-2xl font-bold text-purple-900">
-                  ${formatCurrency(finalResults.stocksOnly.netWorth)}
-                </p>
-                <p className="text-sm text-gray-600">Final Net Worth</p>
-                <p className="text-sm text-gray-700">
-                  Monthly Cost: $0
-                </p>
-              </div>
-            </div>
-          </div>
+                  <div>
+                    <label className="block text-sm font`-medium text-gray-700 mb-2">
+                        Down Payment (%)
+                        <InfoTooltip param="downPaymentPercent" />
+                    </label>
+                    <div className='relative'>
+                        <input
+                        type="number"
+                        value={params.downPaymentPercent}
+                        onChange={(e) => updateParam('downPaymentPercent', e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                        min="0"
+                        max="100"
+                        />
+                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+                        ${formatCurrency(params.housePrice * (params.downPaymentPercent / 100))}
+                        </span>
+                    </div>
+                    {params.downPaymentPercent < 20 && (
+                        <p className="text-xs text-amber-600 mt-1">PMI will apply (below 20%)</p>
+                    )}
+                    </div>
 
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8">
-            <p className="font-semibold text-yellow-800">
-              Best Strategy: <span className="text-yellow-900">{bestStrategy.replace(/([A-Z])/g, ' $1').trim()}</span>
-            </p>
-            <p className="text-sm text-yellow-700 mt-1">
-              After {params.yearsToAnalyze} years, this strategy yields the highest net worth of ${formatCurrency(finalResults[bestStrategy].netWorth)}
-            </p>
-          </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Mortgage Rate (%)
+                      <InfoTooltip param="mortgageRate" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.mortgageRate}
+                      onChange={(e) => updateParam('mortgageRate', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
 
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800">Net Worth Over Time</h3>
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={netWorthChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="year" label={{ value: 'Year', position: 'insideBottom', offset: -5 }} />
-                <YAxis label={{ value: 'Net Worth ($)', angle: -90, position: 'insideLeft' }} />
-                <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
-                <Legend />
-                <Line type="monotone" dataKey="Buy to Live" stroke="#4F46E5" strokeWidth={2} />
-                <Line type="monotone" dataKey="Buy to Rent" stroke="#10B981" strokeWidth={2} />
-                <Line type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Loan Term (Years)
+                      <InfoTooltip param="loanTermYears" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.loanTermYears}
+                      onChange={(e) => updateParam('loanTermYears', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
 
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800">Monthly Cash Flow</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={cashFlowChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="year" label={{ value: 'Year', position: 'insideBottom', offset: -5 }} />
-                <YAxis label={{ value: 'Monthly Cash Flow ($)', angle: -90, position: 'insideLeft' }} />
-                <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
-                <Legend />
-                <Bar dataKey="Buy to Live" fill="#4F46E5" />
-                <Bar dataKey="Buy to Rent" fill="#10B981" />
-                <Bar dataKey="Stocks Only" fill="#8B5CF6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Property Tax Rate (%)
+                      <InfoTooltip param="propertyTaxRate" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.propertyTaxRate}
+                      onChange={(e) => updateParam('propertyTaxRate', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
 
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800">Year-by-Year Comparison</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Year</th>
-                    <th className="px-4 py-2 text-right">Buy to Live</th>
-                    <th className="px-4 py-2 text-right">Buy to Rent</th>
-                    <th className="px-4 py-2 text-right">Stocks Only</th>
-                    <th className="px-4 py-2 text-left">Winner</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[0, 5, 10, 15, 20, 25, 30, 35].filter(y => y <= params.yearsToAnalyze).map(year => {
-                    const live = calculations.buyToLive[year];
-                    const rent = calculations.buyToRent[year];
-                    const stocks = calculations.stocksOnly[year];
-                    const max = Math.max(live.netWorth, rent.netWorth, stocks.netWorth);
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Home Insurance ($/month)
+                      <InfoTooltip param="homeInsurance" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.homeInsurance}
+                      onChange={(e) => updateParam('homeInsurance', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      HOA Fees ($/month)
+                      <InfoTooltip param="hoaFees" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.hoaFees}
+                      onChange={(e) => updateParam('hoaFees', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Maintenance (% of home value/year)
+                      <InfoTooltip param="maintenance" />
+                    </label>
+                    <div className='relative'>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.maintenancePercent}
+                      onChange={(e) => updateParam('maintenancePercent', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                      min="0"
+                      max="100"
+                    />
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+                      ${formatCurrency(params.housePrice * (params.maintenancePercent / 100))}
+                    </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Home Appreciation (% per year)
+                      <InfoTooltip param="homeAppreciation" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.homeAppreciation}
+                      onChange={(e) => updateParam('homeAppreciation', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                    <h4 className="font-semibold text-amber-900 mb-2">PMI Settings</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          PMI Rate (% annually)
+                          <InfoTooltip param="pmiRate" />
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={params.pmiRate}
+                          onChange={(e) => updateParam('pmiRate', e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          PMI Threshold (% equity)
+                          <InfoTooltip param="pmiThreshold" />
+                        </label>
+                        <input
+                          type="number"
+                          value={params.pmiThreshold}
+                          onChange={(e) => updateParam('pmiThreshold', e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg text-green-900 border-b-2 border-green-200 pb-3">
+                    Rental Parameters
+                  </h3>
+
+                  <div className="bg-green-50 p-4 rounded-xl border border-green-200">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={params.useRentPercentage}
+                        onChange={(e) => updateParam('useRentPercentage', e.target.checked)}
+                        className="w-5 h-5"
+                      />
+                      <span className="text-sm font-medium text-gray-900">Use % of Home Value for Rent</span>
+                    </label>
+                  </div>
+
+                  {params.useRentPercentage ? (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Monthly Rent (% of home value annually)
+                        <InfoTooltip param="rentPercentage" />
+                        </label>
+                        <div className='relative'>
+                        <input
+                            type="number"
+                            step="0.1"
+                            value={params.rentPercentage}
+                            onChange={(e) => updateParam('rentPercentage', e.target.value)}
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                        />
+                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+                            ${formatCurrency(monthlyRentCalculated)}/mo
+                        </span>
+                        </div>
+                    </div>
+                    ) : (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Monthly Rent ($/month)
+                        <InfoTooltip param="monthlyRentFixed" />
+                        </label>
+                        <input
+                        type="number"
+                        value={params.monthlyRentFixed}
+                        onChange={(e) => updateParam('monthlyRentFixed', e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                        />
+                    </div>
+                    )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Vacancy Rate (%)
+                      <InfoTooltip param="vacancyRate" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.vacancyRate}
+                      onChange={(e) => updateParam('vacancyRate', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Property Management (%)
+                      <InfoTooltip param="propertyManagementPercent" />
+                    </label>
+                    <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.propertyManagementPercent}
+                      onChange={(e) => updateParam('propertyManagementPercent', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+                    ${formatCurrency(params.housePrice * (params.propertyManagementPercent / 100))}
+                    </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Rent Growth (% per year)
+                      <InfoTooltip param="rentGrowth" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.rentGrowth}
+                      onChange={(e) => updateParam('rentGrowth', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Landlord Insurance Premium (% above homeowner)
+                      <InfoTooltip param="landlordInsurancePremium" />
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={params.landlordInsurancePremium}
+                      onChange={(e) => updateParam('landlordInsurancePremium', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Maintenance (% of rent)
+                      <InfoTooltip param="maintenanceRental" />
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={params.maintenanceRental}
+                        onChange={(e) => updateParam('maintenanceRental', e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+
+                      />
+                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+                        ${formatCurrency(params.housePrice * (params.maintenanceRental / 100))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      CapEx Reserve (% of rent)
+                      <InfoTooltip param="capexReserve" />
+                    </label>
+                    <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.capexReserve}
+                      onChange={(e) => updateParam('capexReserve', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+                        ${formatCurrency(params.housePrice * (params.capexReserve / 100))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Turnover Cost (months of rent)
+                      <InfoTooltip param="turnoverCostMonths" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={params.turnoverCostMonths}
+                      onChange={(e) => updateParam('turnoverCostMonths', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Average Tenant Stay (years)
+                      <InfoTooltip param="avgTenancyYears" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={params.avgTenancyYears}
+                      onChange={(e) => updateParam('avgTenancyYears', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg text-purple-900 border-b-2 border-purple-200 pb-3">
+                    Investment & Timeline
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Stock Market Return (% per year)
+                      <InfoTooltip param="stockReturn" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.stockReturn}
+                      onChange={(e) => updateParam('stockReturn', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Dividend Yield (%)
+                      <InfoTooltip param="dividendYield" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.dividendYield}
+                      onChange={(e) => updateParam('dividendYield', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div className="bg-purple-50 p-4 rounded-xl border border-purple-200">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={params.dividendsReinvested}
+                        onChange={(e) => updateParam('dividendsReinvested', e.target.checked)}
+                        className="w-5 h-5"
+                      />
+                      <span className="text-sm font-medium text-gray-900 font-medium">Reinvest Dividends</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Initial Cash Available ($)
+                      <InfoTooltip param="initialCash" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.initialCash}
+                      onChange={(e) => updateParam('initialCash', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Years to Analyze
+                      <InfoTooltip param="yearsToAnalyze" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.yearsToAnalyze}
+                      onChange={(e) => updateParam('yearsToAnalyze', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition text-gray-900 font-medium"
+                      min="1"
+                      max="50"
+                    />
+                  </div>
+
+                  <div className="bg-purple-100 p-5 rounded-xl border-2 border-purple-300">
+                    <h4 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5" />
+                      Recurring Contributions
+                    </h4>
                     
-                    return (
-                      <tr key={year} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-2 font-medium">{year}</td>
-                        <td className={`px-4 py-2 text-right ${live.netWorth === max ? 'font-bold text-indigo-600' : ''}`}>
-                          ${formatCurrency(live.netWorth)}
-                        </td>
-                        <td className={`px-4 py-2 text-right ${rent.netWorth === max ? 'font-bold text-green-600' : ''}`}>
-                          ${formatCurrency(rent.netWorth)}
-                        </td>
-                        <td className={`px-4 py-2 text-right ${stocks.netWorth === max ? 'font-bold text-purple-600' : ''}`}>
-                          ${formatCurrency(stocks.netWorth)}
-                        </td>
-                        <td className="px-4 py-2">
-                          {live.netWorth === max && '🏠 Buy to Live'}
-                          {rent.netWorth === max && '💰 Buy to Rent'}
-                          {stocks.netWorth === max && '📈 Stocks Only'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={params.enableRecurringContributions}
+                          onChange={(e) => updateParam('enableRecurringContributions', e.target.checked)}
+                          className="w-5 h-5"
+                        />
+                        <span className="text-sm font-medium">Enable Recurring Contributions</span>
+                      </label>
+
+                      {params.enableRecurringContributions && (
+                        <>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Contribution Amount ($)
+                            </label>
+                            <input
+                              type="number"
+                              value={params.contributionAmount}
+                              onChange={(e) => updateParam('contributionAmount', e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Frequency
+                            </label>
+                            <select
+                              value={params.contributionFrequency}
+                              onChange={(e) => setParams(prev => ({ ...prev, contributionFrequency: e.target.value }))}
+                              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
+                            >
+                              <option value="monthly">Monthly</option>
+                              <option value="yearly">Yearly</option>
+                            </select>
+                          </div>
+
+                          <div className="text-xs text-purple-700 bg-white p-2 rounded">
+                            Total per year: ${formatCurrency(params.contributionFrequency === 'monthly' ? 
+                              params.contributionAmount * 12 : params.contributionAmount)}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-100 p-5 rounded-xl border-2 border-blue-300">
+                    <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                        Tax Considerations
+                    </h4>
+                    
+                    <div className="space-y-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={params.enableTaxBenefits}
+                            onChange={(e) => updateParam('enableTaxBenefits', e.target.checked)}
+                            className="w-5 h-5"
+                        />
+                        <span className="text-sm font-medium">Enable Tax Calculations</span>
+                        </label>
+
+                        {params.enableTaxBenefits && (
+                        <>
+                            <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Marginal Tax Rate (%)
+                            </label>
+                            <input
+                                type="number"
+                                value={params.marginalTaxRate}
+                                onChange={(e) => updateParam('marginalTaxRate', e.target.value)}
+                                className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
+                            />
+                            </div>
+
+                            <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Standard Deduction ($)
+                            </label>
+                            <input
+                                type="number"
+                                value={params.standardDeduction}
+                                onChange={(e) => updateParam('standardDeduction', e.target.value)}
+                                className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
+                            />
+                            </div>
+
+                            <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Land Value (% of purchase price)
+                            </label>
+                            <input
+                                type="number"
+                                value={params.landValuePercent}
+                                onChange={(e) => updateParam('landValuePercent', e.target.value)}
+                                className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
+                            />
+                            <p className="text-xs text-gray-600 mt-1">Land doesn't depreciate</p>
+                            </div>
+                        </>
+                        )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'overview' && (
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-2xl border-2 border-indigo-200 shadow-lg">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Home className="w-7 h-7 text-indigo-600" />
+                      <h3 className="font-semibold text-lg text-indigo-900">Buy to Live</h3>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-3xl font-bold text-indigo-900">
+                        ${formatCurrency(finalResults.buyToLive.netWorth)}
+                      </p>
+                      <p className="text-sm text-gray-600">Final Net Worth</p>
+                      <div className="pt-2 border-t border-indigo-200">
+                        <p className="text-sm text-gray-700">
+                          Monthly Cost: ${formatCurrency(finalResults.buyToLive.monthlyPayment)}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Home: ${formatCurrency(finalResults.buyToLive.homeEquity)} | 
+                          Stocks: ${formatCurrency(finalResults.buyToLive.stockValue)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border-2 border-green-200 shadow-lg">
+                    <div className="flex items-center gap-3 mb-3">
+                      <DollarSign className="w-7 h-7 text-green-600" />
+                      <h3 className="font-semibold text-lg text-green-900">Buy to Rent</h3>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-3xl font-bold text-green-900">
+                        ${formatCurrency(finalResults.buyToRent.netWorth)}
+                      </p>
+                      <p className="text-sm text-gray-600">Final Net Worth</p>
+                      <div className="pt-2 border-t border-green-200">
+                        <p className="text-sm text-gray-700">
+                          Cash Flow: ${formatCurrency(finalResults.buyToRent.monthlyCashFlow)}/mo
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Home: ${formatCurrency(finalResults.buyToRent.homeEquity)} | 
+                          Stocks: ${formatCurrency(finalResults.buyToRent.stockValue)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border-2 border-purple-200 shadow-lg">
+                    <div className="flex items-center gap-3 mb-3">
+                      <TrendingUp className="w-7 h-7 text-purple-600" />
+                      <h3 className="font-semibold text-lg text-purple-900">Stocks Only</h3>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-3xl font-bold text-purple-900">
+                        ${formatCurrency(finalResults.stocksOnly.netWorth)}
+                      </p>
+                      <p className="text-sm text-gray-600">Final Net Worth</p>
+                      <div className="pt-2 border-t border-purple-200">
+                        <p className="text-sm text-gray-700">
+                          Monthly Cost: $0
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Principal: ${formatCurrency(finalResults.stocksOnly.stockValue)} | 
+                          Dividends: ${formatCurrency(finalResults.stocksOnly.dividends)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {params.enableRecurringContributions && (
+                    <div className="bg-gradient-to-br from-violet-50 to-violet-100 p-6 rounded-2xl border-2 border-violet-200 shadow-lg">
+                      <div className="flex items-center gap-3 mb-3">
+                        <TrendingUp className="w-7 h-7 text-violet-600" />
+                        <h3 className="font-semibold text-lg text-violet-900">Stocks + DCA</h3>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-3xl font-bold text-violet-900">
+                          ${formatCurrency(finalResults.stocksWithContributions.netWorth)}
+                        </p>
+                        <p className="text-sm text-gray-600">Final Net Worth</p>
+                        <div className="pt-2 border-t border-violet-200">
+                          <p className="text-sm text-gray-700">
+                            Contributions: ${formatCurrency(finalResults.stocksWithContributions.contributions)}
+                          </p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Principal: ${formatCurrency(finalResults.stocksWithContributions.stockValue)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-l-4 border-yellow-400 p-6 rounded-xl shadow-md">
+                  <p className="font-semibold text-yellow-900 text-lg">
+                    Best Strategy: <span className="text-yellow-800">{formatStrategyName(bestStrategy)}</span>
+                  </p>
+                  <p className="text-sm text-yellow-700 mt-2">
+                    After {params.yearsToAnalyze} years, this strategy yields the highest net worth of ${formatCurrency(finalResults[bestStrategy].netWorth)}
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-2xl font-semibold mb-4 text-gray-800">Net Worth Over Time</h3>
+                  <ResponsiveContainer width="100%" height={450}>
+                    <AreaChart data={netWorthChartData}>
+                      <defs>
+                        <linearGradient id="colorLive" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#4F46E5" stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="colorRent" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="colorStocks" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="colorStocksDCA" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#7C3AED" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis dataKey="year" label={{ value: 'Year', position: 'insideBottom', offset: -5 }} />
+                      <YAxis label={{ value: 'Net Worth ($)', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip formatter={(value) => `${formatCurrency(value)}`} />
+                      <Legend />
+                      <Area type="monotone" dataKey="Buy to Live" stroke="#4F46E5" fillOpacity={1} fill="url(#colorLive)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Buy to Rent" stroke="#10B981" fillOpacity={1} fill="url(#colorRent)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorStocks)" strokeWidth={2} />
+                      {params.enableRecurringContributions && (
+                        <Area type="monotone" dataKey="Stocks + Contributions" stroke="#7C3AED" fillOpacity={1} fill="url(#colorStocksDCA)" strokeWidth={2} />
+                      )}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div>
+                  <h3 className="text-2xl font-semibold mb-4 text-gray-800">Monthly Cash Flow Comparison</h3>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={cashFlowChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis dataKey="year" label={{ value: 'Year', position: 'insideBottom', offset: -5 }} />
+                      <YAxis label={{ value: 'Monthly Cash Flow ($)', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip formatter={(value) => `${formatCurrency(value)}`} />
+                      <Legend />
+                      <Bar dataKey="Buy to Live" fill="#4F46E5" />
+                      <Bar dataKey="Buy to Rent" fill="#10B981" />
+                      <Bar dataKey="Stocks Only" fill="#8B5CF6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'analysis' && (
+              <div className="space-y-8">
+                <div>
+                  <h3 className="text-2xl font-semibold mb-4 text-gray-800">Year-by-Year Net Worth Comparison</h3>
+                  <div className="overflow-x-auto rounded-xl border-2 border-gray-200">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gradient-to-r from-gray-100 to-gray-200">
+                        <tr>
+                          <th className="px-6 py-4 text-left font-semibold text-gray-900 font-medium">Year</th>
+                          <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Buy to Live</th>
+                          <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Buy to Rent</th>
+                          <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Stocks Only</th>
+                          {params.enableRecurringContributions && (
+                            <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Stocks + DCA</th>
+                          )}
+                          <th className="px-6 py-4 text-left font-semibold text-gray-900 font-medium">Winner</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[0, 5, 10, 15, 20, 25, 30, 35].filter(y => y <= params.yearsToAnalyze).map(year => {
+                          const live = calculations.buyToLive[year];
+                          const rent = calculations.buyToRent[year];
+                          const stocks = calculations.stocksOnly[year];
+                          const stocksDCA = calculations.stocksWithContributions[year];
+                          
+                          const values = {
+                            live: live.netWorth,
+                            rent: rent.netWorth,
+                            stocks: stocks.netWorth,
+                            stocksDCA: params.enableRecurringContributions ? stocksDCA.netWorth : 0
+                          };
+                          
+                          const max = Math.max(...Object.values(values));
+                          
+                          return (
+                            <tr key={year} className="border-b hover:bg-gray-50 transition ">
+                              <td className="px-6 py-4 text-gray-900 font-medium">{year}</td>
+                              <td className={`px-6 py-4 text-right text-gray-900 ${live.netWorth === max ? 'font-bold text-indigo-600 bg-indigo-50 ' : ''}`}>
+                                ${formatCurrency(live.netWorth)}
+                              </td>
+                              <td className={`px-6 py-4 text-right text-gray-900 ${rent.netWorth === max ? 'font-bold text-green-600 bg-green-50 ' : ''}`}>
+                                ${formatCurrency(rent.netWorth)}
+                              </td>
+                              <td className={`px-6 py-4 text-right text-gray-900 ${stocks.netWorth === max ? 'font-bold text-purple-600 bg-purple-50 ' : ''}`}>
+                                ${formatCurrency(stocks.netWorth)}
+                              </td>
+                              {params.enableRecurringContributions && (
+                                <td className={`px-6 py-4 text-right text-gray-900 ${stocksDCA.netWorth === max ? 'font-bold text-violet-600 bg-violet-50 ' : ''}`}>
+                                  ${formatCurrency(stocksDCA.netWorth)}
+                                </td>
+                              )}
+                              <td className="px-6 py-4 text-gray-900 font-medium">
+                                {live.netWorth === max && '🏠 Buy to Live'}
+                                {rent.netWorth === max && '💰 Buy to Rent'}
+                                {stocks.netWorth === max && '📈 Stocks Only'}
+                                {params.enableRecurringContributions && stocksDCA.netWorth === max && '📊 Stocks + DCA'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-2xl font-semibold mb-4 text-gray-800">Return on Investment Analysis</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {Object.keys(finalResults).filter(key => key !== 'stocksWithContributions' || params.enableRecurringContributions).map(strategyKey => {
+                      const result = finalResults[strategyKey];
+                      const totalROI = ((result.netWorth / params.initialCash) - 1) * 100;
+                      const annualROI = (Math.pow(result.netWorth / params.initialCash, 1/params.yearsToAnalyze) - 1) * 100;
+                      
+                      const colorMap = {
+                        buyToLive: 'indigo',
+                        buyToRent: 'green',
+                        stocksOnly: 'purple',
+                        stocksWithContributions: 'violet'
+                      };
+                      const color = colorMap[strategyKey];
+                      
+                      return (
+                        <div key={strategyKey} className={`bg-${color}-50 p-6 rounded-xl border-2 border-${color}-200`}>
+                          <h4 className={`font-semibold text-${color}-900 mb-3`}>{formatStrategyName(strategyKey)}</h4>
+                          <div className="space-y-2 text-sm">
+                            <p className="text-gray-700">
+                              Initial: ${formatCurrency(params.initialCash)}
+                            </p>
+                            <p className="text-gray-700">
+                              Final: ${formatCurrency(result.netWorth)}
+                            </p>
+                            <p className={`text-gray-700 font-semibold text-${color}-700`}>
+                              Total ROI: {totalROI.toFixed(1)}%
+                            </p>
+                            <p className="text-gray-700">
+                              Annual ROI: {annualROI.toFixed(2)}%
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-2xl font-semibold mb-4 text-gray-800">Break-Even Analysis</h3>
+                  <div className="bg-blue-50 p-6 rounded-xl border-2 border-blue-200">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-700 mb-2">
+                          When does Buy to Rent become more profitable than Stocks Only?
+                        </p>
+                        {(() => {
+                          const breakEvenYear = calculations.buyToRent.findIndex((item, idx) => 
+                            item.netWorth > calculations.stocksOnly[idx].netWorth
+                          );
+                          return breakEvenYear > 0 ? (
+                            <p className="text-sm text-gray-600">
+                              Buy to Rent surpasses Stocks Only at Year {breakEvenYear}
+                            </p>
+                          ) : breakEvenYear === 0 ? (
+                            <p className="text-sm text-gray-600">
+                              Buy to Rent is immediately more profitable
+                            </p>
+                          ) : (
+                            <p className="text-sm text-gray-600">
+                              Buy to Rent never surpasses Stocks Only in this timeframe
+                            </p>
+                          );
+                        })()}
+                      </div>
+
+                      <div>
+                        <p className="text-sm font-semibold text-gray-700 mb-2">
+                          When does Buy to Live become more profitable than Stocks Only?
+                        </p>
+                        {(() => {
+                          const breakEvenYear = calculations.buyToLive.findIndex((item, idx) => 
+                            item.netWorth > calculations.stocksOnly[idx].netWorth
+                          );
+                          return breakEvenYear > 0 ? (
+                            <p className="text-sm text-gray-600">
+                              Buy to Live surpasses Stocks Only at Year {breakEvenYear}
+                            </p>
+                          ) : breakEvenYear === 0 ? (
+                            <p className="text-sm text-gray-600">
+                              Buy to Live is immediately more profitable
+                            </p>
+                          ) : (
+                            <p className="text-sm text-gray-600">
+                              Buy to Live never surpasses Stocks Only in this timeframe
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showExplanations && (
+              <div className="mt-12 bg-gradient-to-br from-gray-50 to-slate-100 rounded-2xl p-8 border-2 border-gray-200">
+                <h3 className="text-2xl font-semibold text-gray-800 border-b-2 border-gray-300 pb-4 mb-6">
+                  Calculation Methodology & Formulas
+                </h3>
+
+                <div className="space-y-6">
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h4 className="font-semibold text-indigo-900 mb-3 text-lg">Monthly Mortgage Payment</h4>
+                    <div className="bg-indigo-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      M = P × [r(1+r)^n] / [(1+r)^n - 1]
+                    </div>
+                    <p className="text-sm text-gray-700 mb-2">
+                      <strong>Where:</strong>
+                    </p>
+                    <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside ml-2">
+                      <li>M = Monthly payment</li>
+                      <li>P = Principal (loan amount)</li>
+                      <li>r = Monthly interest rate (annual rate / 12)</li>
+                      <li>n = Total number of payments (years × 12)</li>
+                    </ul>
+                    <div className="mt-4 bg-blue-50 p-4 rounded-lg">
+                      <p className="text-sm font-semibold text-blue-900 mb-2">Example:</p>
+                      <p className="text-sm text-gray-700">
+                        For a $268,000 loan at 5% for 30 years: Monthly rate = 0.05/12 = 0.00417, 
+                        n = 360 months. Payment = ${formatCurrency(calculateMortgagePayment(268000, 5, 30))}/month
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h4 className="font-semibold text-amber-900 mb-3 text-lg">PMI (Private Mortgage Insurance)</h4>
+                    <div className="bg-amber-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Monthly PMI = (Loan Amount × PMI Rate) / 12
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      PMI is required when down payment is less than 20% of home value. It typically costs 0.3-1.5% of the loan amount annually. PMI is removed once you reach 20% equity through payments and appreciation.
+                    </p>
+                    <div className="mt-4 bg-amber-50 p-4 rounded-lg">
+                      <p className="text-sm font-semibold text-amber-900 mb-2">Example:</p>
+                      <p className="text-sm text-gray-700">
+                        $335,000 home with 10% down ($33,500) = $301,500 loan. 
+                        At 0.5% PMI rate: Annual PMI = $1,508, Monthly PMI = ${formatCurrency(301500 * 0.005 / 12)}/month
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h4 className="font-semibold text-indigo-900 mb-3 text-lg">Buy to Live Net Worth Calculation</h4>
+                    <div className="bg-indigo-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Net Worth = Home Equity + Stock Investments
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>Home Equity:</strong> Current home value minus remaining mortgage balance
+                    </p>
+                    <div className="bg-indigo-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Home Value(t) = Purchase Price × (1 + Appreciation Rate)^t
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>Stock Investments:</strong> Any cash not used for down payment, invested in the market
+                    </p>
+                    <div className="bg-indigo-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Stock Value(t) = (Initial Cash - Down Payment) × (1 + Stock Return)^t
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>Monthly Costs:</strong> Mortgage + PMI + Property Tax + Insurance + HOA + Maintenance
+                    </p>
+                    <div className="mt-4 bg-blue-50 p-4 rounded-lg">
+                      <p className="text-sm font-semibold text-blue-900 mb-2">Example (Year 10):</p>
+                      <p className="text-sm text-gray-700">
+                        $335,000 home appreciating at 4%/year = ${formatCurrency(335000 * Math.pow(1.04, 10))} value.
+                        Remaining mortgage = ${formatCurrency(calculateRemainingBalance(268000, 5, 360, 120))}.
+                        Home Equity = ${formatCurrency(335000 * Math.pow(1.04, 10) - calculateRemainingBalance(268000, 5, 360, 120))}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h4 className="font-semibold text-green-900 mb-3 text-lg">Buy to Rent Net Worth Calculation</h4>
+                    <div className="bg-green-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Net Worth = Home Equity + Initial Stock Investment + Accumulated Rental Profits
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>Net Monthly Rent:</strong>
+                    </p>
+                    <div className="bg-green-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Gross Rent × (1 - Vacancy Rate) × (1 - Management Fee %)
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>Monthly Expenses:</strong> Mortgage + PMI + Property Tax + Landlord Insurance + HOA + Maintenance + CapEx Reserve
+                    </p>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>Monthly Cash Flow:</strong>
+                    </p>
+                    <div className="bg-green-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Cash Flow = Net Monthly Rent - Monthly Expenses
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      Positive cash flow is invested in stocks and compounds over time. Turnover costs (cleaning, repairs, vacancy) occur every few years based on average tenant stay.
+                    </p>
+                    <div className="mt-4 bg-green-50 p-4 rounded-lg">
+                      <p className="text-sm font-semibold text-green-900 mb-2">Example:</p>
+                      <p className="text-sm text-gray-700">
+                        Monthly rent of $2,400 with 7% vacancy = $2,232 effective rent. 
+                        8% management fee = $179. Net rent = $2,053.
+                        If expenses = $1,800, cash flow = $253/month invested in stocks.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h4 className="font-semibold text-purple-900 mb-3 text-lg">Stock Investment Calculations</h4>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>Basic Growth (Stocks Only):</strong>
+                    </p>
+                    <div className="bg-purple-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Value(t) = Initial Investment × (1 + Return Rate)^t
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>With Dividends (Reinvested):</strong>
+                    </p>
+                    <div className="bg-purple-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Annual Dividend = Portfolio Value × Dividend Yield<br/>
+                      Dividend Value(t) = Σ [Dividend(year i) × (1 + Return)^(t-i)]
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      <strong>With Recurring Contributions:</strong>
+                    </p>
+                    <div className="bg-purple-50 p-4 rounded-lg font-mono text-sm mb-3 text-gray-900 font-medium">
+                      Future Value = Σ [Contribution(year i) × (1 + Return)^(t-i)]
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      Each year's contribution grows for the remaining years until the target year.
+                    </p>
+                    <div className="mt-4 bg-purple-50 p-4 rounded-lg">
+                      <p className="text-sm font-semibold text-purple-900 mb-2">Example (10 years):</p>
+                      <p className="text-sm text-gray-700">
+                        $67,000 initial at 7.5% return = ${formatCurrency(67000 * Math.pow(1.075, 10))}.
+                        With $500/month contributions = ${formatCurrency(67000 * Math.pow(1.075, 10) + (6000 * (Math.pow(1.075, 10) - 1) / 0.075))} (using annuity formula).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3 text-lg">Key Assumptions</h4>
+                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
+                      <li>All returns are real (inflation-adjusted) unless otherwise specified</li>
+                      <li>Stock returns and real estate appreciation compound annually</li>
+                      <li>Rental income and expenses adjust annually for growth/inflation</li>
+                      <li>Maintenance costs scale with home value (for owners) or rent (for landlords)</li>
+                      <li>PMI is removed when home equity reaches the threshold percentage (typically 20%)</li>
+                      <li>Rental property cash flows are reinvested in stocks immediately</li>
+                      <li>No taxes, transaction costs, or selling fees are included (focus on net worth only)</li>
+                      <li>Perfect market liquidity assumed</li>
+                      <li>Dividends can be reinvested or taken as cash</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3 text-lg">Data Sources & Defaults</h4>
+                    <div className="text-sm text-gray-700 space-y-2">
+                      <p><strong>Property Appreciation:</strong> Historical average for major metros ranges 3-6% annually. Houston historically: 6.04% (10-year average through 2025).</p>
+                      <p><strong>Stock Returns:</strong> S&P 500 historical average ~10% nominal, ~7-8% real (inflation-adjusted).</p>
+                      <p><strong>Dividend Yields:</strong> S&P 500 current yield ~1.5-2%. Total return includes price appreciation + dividends.</p>
+                      <p><strong>Property Tax:</strong> Varies widely by location. Range: 0.3% (Hawaii) to 2.5% (New Jersey). Houston average: 1.9%.</p>
+                      <p><strong>PMI Rate:</strong> Typically 0.3-1.5% of loan amount annually. Default: 0.5%.</p>
+                      <p><strong>Rental Vacancy:</strong> National average 6-7%, varies by market conditions. Houston currently elevated at 11% (apartments).</p>
+                      <p><strong>Property Management:</strong> Typical range 8-12% of monthly rent. Houston average: 8-10%.</p>
+                      <p><strong>CapEx Reserve:</strong> Industry standard 8-10% of rent for major repairs (roof, HVAC, appliances).</p>
+                      <p><strong>Maintenance:</strong> 1% of home value annually for owners, 3-5% of rent for landlords.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800">Return on Investment Analysis</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-indigo-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-indigo-900 mb-2">Buy to Live</h4>
-                <div className="space-y-1 text-sm">
-                  <p className="text-gray-700">
-                    Initial Investment: ${formatCurrency(params.housePrice * params.downPaymentPercent / 100)}
-                  </p>
-                  <p className="text-gray-700">
-                    Final Value: ${formatCurrency(finalResults.buyToLive.netWorth)}
-                  </p>
-                  <p className="text-gray-700 font-semibold">
-                    Total ROI: {(((finalResults.buyToLive.netWorth / params.initialCash) - 1) * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-gray-700">
-                    Annual ROI: {((Math.pow(finalResults.buyToLive.netWorth / params.initialCash, 1/params.yearsToAnalyze) - 1) * 100).toFixed(2)}%
-                  </p>
-                </div>
-              </div>
-              
-              <div className="bg-green-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-green-900 mb-2">Buy to Rent</h4>
-                <div className="space-y-1 text-sm">
-                  <p className="text-gray-700">
-                    Initial Investment: ${formatCurrency(params.housePrice * params.downPaymentPercent / 100)}
-                  </p>
-                  <p className="text-gray-700">
-                    Final Value: ${formatCurrency(finalResults.buyToRent.netWorth)}
-                  </p>
-                  <p className="text-gray-700 font-semibold">
-                    Total ROI: {(((finalResults.buyToRent.netWorth / params.initialCash) - 1) * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-gray-700">
-                    Annual ROI: {((Math.pow(finalResults.buyToRent.netWorth / params.initialCash, 1/params.yearsToAnalyze) - 1) * 100).toFixed(2)}%
-                  </p>
-                </div>
-              </div>
-              
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-purple-900 mb-2">Stocks Only</h4>
-                <div className="space-y-1 text-sm">
-                  <p className="text-gray-700">
-                    Initial Investment: ${formatCurrency(params.initialCash)}
-                  </p>
-                  <p className="text-gray-700">
-                    Final Value: ${formatCurrency(finalResults.stocksOnly.netWorth)}
-                  </p>
-                  <p className="text-gray-700 font-semibold">
-                    Total ROI: {(((finalResults.stocksOnly.netWorth / params.initialCash) - 1) * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-gray-700">
-                    Annual ROI: {((Math.pow(finalResults.stocksOnly.netWorth / params.initialCash, 1/params.yearsToAnalyze) - 1) * 100).toFixed(2)}%
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800">Break-Even Analysis</h3>
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-700 mb-2">
-                <strong>When does Buy to Rent become more profitable than Stocks Only?</strong>
-              </p>
-              {(() => {
-                const breakEvenYear = calculations.buyToRent.findIndex((item, idx) => 
-                  item.netWorth > calculations.stocksOnly[idx].netWorth
-                );
-                return breakEvenYear > 0 ? (
-                  <p className="text-sm text-gray-600">
-                    Buy to Rent surpasses Stocks Only at Year {breakEvenYear}
-                  </p>
-                ) : breakEvenYear === 0 ? (
-                  <p className="text-sm text-gray-600">
-                    Buy to Rent is immediately more profitable
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    Buy to Rent never surpasses Stocks Only in this timeframe
-                  </p>
-                );
-              })()}
-              
-              <p className="text-sm text-gray-700 mb-2 mt-4">
-                <strong>When does Buy to Live become more profitable than Stocks Only?</strong>
-              </p>
-              {(() => {
-                const breakEvenYear = calculations.buyToLive.findIndex((item, idx) => 
-                  item.netWorth > calculations.stocksOnly[idx].netWorth
-                );
-                return breakEvenYear > 0 ? (
-                  <p className="text-sm text-gray-600">
-                    Buy to Live surpasses Stocks Only at Year {breakEvenYear}
-                  </p>
-                ) : breakEvenYear === 0 ? (
-                  <p className="text-sm text-gray-600">
-                    Buy to Live is immediately more profitable
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    Buy to Live never surpasses Stocks Only in this timeframe
-                  </p>
-                );
-              })()}
-            </div>
-          </div>
-
-          {showExplanations && (
-            <div className="bg-gray-50 rounded-xl p-6 space-y-6">
-              <h3 className="text-xl font-semibold text-gray-800 border-b pb-2">
-                How the Calculations Work
-              </h3>
-
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-semibold text-indigo-900 mb-2">Monthly Mortgage Payment</h4>
-                  <p className="text-sm text-gray-700 mb-2">
-                    Formula: M = P × [r(1+r)^n] / [(1+r)^n - 1]
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Where: P = principal (loan amount), r = monthly interest rate, n = number of payments
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-indigo-900 mb-2">Buy to Live Strategy</h4>
-                  <p className="text-sm text-gray-700">
-                    <strong>Net Worth</strong> = Home Equity + Stock Investments
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Home Equity = Home Value - Remaining Mortgage Balance
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Stock Investments = (Initial Cash - Down Payment) × (1 + Stock Return)^Years
-                  </p>
-                  <p className="text-sm text-gray-600 mt-2">
-                    <strong>Monthly Costs</strong> = Mortgage + Property Tax + Insurance + HOA + Maintenance
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-green-900 mb-2">Buy to Rent Strategy</h4>
-                  <p className="text-sm text-gray-700">
-                    <strong>Net Worth</strong> = Home Equity + Stock Investments (initial + accumulated rental profits)
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Net Monthly Rent = Gross Rent × (1 - Vacancy Rate) × (1 - Management Fee)
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Monthly Cash Flow = Net Rent - (Mortgage + Taxes + Insurance + HOA + Maintenance)
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Positive cash flows are invested in stocks and compound over time
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-purple-900 mb-2">Stocks Only Strategy</h4>
-                  <p className="text-sm text-gray-700">
-                    <strong>Net Worth</strong> = Initial Cash × (1 + Stock Return)^Years
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Simple compound growth with no housing expenses or rental income
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">Key Assumptions</h4>
-                  <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                    <li>All returns are assumed to be inflation-adjusted (real returns)</li>
-                    <li>Stock returns compound annually</li>
-                    <li>Rental income and expenses adjust annually for growth/inflation</li>
-                    <li>Maintenance costs scale with home value</li>
-                    <li>No transaction costs, taxes, or selling fees included</li>
-                    <li>Perfect market liquidity assumed</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
-        <div className="text-center text-gray-600 text-sm">
-          <p>Interactive Financial Analysis Tool • Adjust parameters to explore different scenarios</p>
+        <div className="text-center text-gray-600 text-sm mt-8 pb-4">
+          <p>Interactive Investment Strategy Calculator • Adjust parameters to explore scenarios</p>
+          <p className="text-xs text-gray-500 mt-2">For educational purposes only. Not financial advice. Consult a professional advisor.</p>
         </div>
       </div>
     </div>
