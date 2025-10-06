@@ -912,7 +912,7 @@ const FinancialAnalyzer = () => {
             {activeTab === 'cashflow' && (
                 <div className="space-y-8">
                     {/* Monthly cost cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-indigo-50 p-6 rounded-xl border-2 border-indigo-200">
                         <h4 className="font-semibold text-indigo-900 mb-2">Buy to Live</h4>
                         <p className="text-3xl font-bold text-red-600">
@@ -936,7 +936,7 @@ const FinancialAnalyzer = () => {
                         </p>
                         <p className="text-sm text-gray-600 mt-1">per month</p>
                     </div>
-                    </div>
+                    </div> */}
 
                     {/* Line chart */}
                     <div className="bg-white p-6 rounded-xl shadow-md">
