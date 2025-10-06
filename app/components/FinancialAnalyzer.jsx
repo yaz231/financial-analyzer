@@ -7,7 +7,7 @@ import { Calculator, TrendingUp, Home, DollarSign, Info, Settings, HelpCircle } 
 const FinancialAnalyzer = () => {
   const [params, setParams] = useState({
     // Property parameters
-    housePrice: 335000,
+    housePrice: 300000,
     downPaymentPercent: 20,
     mortgageRate: 5.0,
     loanTermYears: 30,
@@ -45,8 +45,8 @@ const FinancialAnalyzer = () => {
     contributionFrequency: 'monthly',
     
     // Timeline
-    yearsToAnalyze: 35,
-    initialCash: 67000,
+    yearsToAnalyze: 30,
+    initialCash: 60000,
 
     // Tax parameters
     enableTaxBenefits: false,
@@ -143,7 +143,6 @@ const FinancialAnalyzer = () => {
       buyToLive: [],
       buyToRent: [],
       stocksOnly: [],
-      stocksWithContributions: []
     };
 
     let cumulativeTaxBenefitsLive = 0;
@@ -253,71 +252,61 @@ const FinancialAnalyzer = () => {
       const totalStocksRent = stockValueRent + rentalProfitsInvested;
       const netWorthRent = homeEquityRent + totalStocksRent + cumulativeTaxBenefitsRent;
 
-      // STOCKS ONLY (no contributions)
-      const totalStockReturn = params.stockReturn / 100;
-      const stockValueOnly = params.initialCash * Math.pow(1 + totalStockReturn, year);
-      
+      // STOCKS ONLY (with optional DCA)
+      let stockValueOnly = params.initialCash * Math.pow(1 + params.stockReturn / 100, year);
+      let contributionsAccumulated = 0;
       let dividendsAccumulated = 0;
       let annualDividendIncome = 0;
 
-      if (params.dividendYield > 0 && year > 0) {
-        for (let y = 1; y <= year; y++) {
-          const portfolioValueAtYear = params.initialCash * Math.pow(1 + totalStockReturn, y);
-          const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
-          const yearsToGrow = year - y;
-          
-          if (params.dividendsReinvested) {
-            dividendsAccumulated += dividendAtYear * Math.pow(1 + totalStockReturn, yearsToGrow);
-          } else {
-            dividendsAccumulated += dividendAtYear;
-          }
-
-          if (y === year) {
-            annualDividendIncome = dividendAtYear;
-          }
-        }
-      }
-      
-      const netWorthStocks = stockValueOnly + dividendsAccumulated;
-      const monthlyCashFlowStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 0;
-
-      // STOCKS WITH CONTRIBUTIONS
-      let stockValueWithContributions = params.initialCash * Math.pow(1 + totalStockReturn, year);
-      let contributionsAccumulated = 0;
-      
+      // Add recurring contributions if enabled
       if (params.enableRecurringContributions && year > 0) {
         const contributionsPerYear = params.contributionFrequency === 'monthly' ? 
-          params.contributionAmount * 12 : params.contributionAmount;
+            params.contributionAmount * 12 : params.contributionAmount;
         
         for (let y = 1; y <= year; y++) {
-          const yearsToGrow = year - y;
-          contributionsAccumulated += contributionsPerYear * Math.pow(1 + totalStockReturn, yearsToGrow);
+            const yearsToGrow = year - y;
+            contributionsAccumulated += contributionsPerYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
         }
       }
-      
-      let dividendsWithContributions = 0;
+
+      // Calculate dividends
       if (params.dividendYield > 0 && year > 0) {
         for (let y = 1; y <= year; y++) {
-          const contributionsSoFar = params.enableRecurringContributions ? 
+            const contributionsSoFar = params.enableRecurringContributions ? 
             (params.contributionFrequency === 'monthly' ? params.contributionAmount * 12 : params.contributionAmount) * y : 0;
-          
-          const baseValueAtYear = params.initialCash * Math.pow(1 + totalStockReturn, y);
-          const contributionsToYear = contributionsSoFar * Math.pow(1 + totalStockReturn, y - Math.floor(y/2)); // Approximate mid-year
-          const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
 
-          const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
-          const yearsToGrow = year - y;
-          
-          if (params.dividendsReinvested) {
-            dividendsWithContributions += dividendAtYear * Math.pow(1 + totalStockReturn, yearsToGrow);
-          } else {
-            dividendsWithContributions += dividendAtYear;
-          }
+            const baseValueAtYear = params.initialCash * Math.pow(1 + params.stockReturn / 100, y);
+            const contributionsToYear = contributionsSoFar * Math.pow(1 + params.stockReturn / 100, y - Math.floor(y/2));
+            const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
+    
+            const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
+            const yearsToGrow = year - y;
+            
+            if (params.dividendsReinvested) {
+            dividendsAccumulated += dividendAtYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+            } else {
+            dividendsAccumulated += dividendAtYear;
+            }
+    
+            if (y === year) {
+            annualDividendIncome = dividendAtYear;
+            }
         }
       }
-      
-      const netWorthStocksWithContributions = stockValueWithContributions + contributionsAccumulated + dividendsWithContributions;
 
+      const netWorthStocks = stockValueOnly + contributionsAccumulated + dividendsAccumulated;
+      const monthlyCashFlowStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 
+      (params.enableRecurringContributions ? -params.contributionAmount : 0);
+  
+      results.stocksOnly.push({
+        year,
+        netWorth: netWorthStocks,
+        stockValue: stockValueOnly,
+        contributions: contributionsAccumulated,
+        dividends: dividendsAccumulated,
+        monthlyCashFlow: monthlyCashFlowStocks
+      });
+        
       results.buyToLive.push({
         year,
         netWorth: netWorthLive,
@@ -327,7 +316,8 @@ const FinancialAnalyzer = () => {
         remainingMortgage,
         monthlyPayment: monthlyHousingCost,
         monthlyPMI: currentPMI,
-        taxBenefit: taxBenefitLive
+        taxBenefit: taxBenefitLive,
+        netMonthlyCashFlow: -Math.round(monthlyHousingCost)
       });
 
       results.buyToRent.push({
@@ -342,23 +332,8 @@ const FinancialAnalyzer = () => {
         monthlyExpenses,
         monthlyCashFlow,
         turnoverCosts,
-        taxBenefit: taxBenefitRent
-      });
-
-      results.stocksOnly.push({
-        year,
-        netWorth: netWorthStocks,
-        stockValue: stockValueOnly,
-        dividends: dividendsAccumulated,
-        monthlyCashFlow: monthlyCashFlowStocks
-      });
-
-      results.stocksWithContributions.push({
-        year,
-        netWorth: netWorthStocksWithContributions,
-        stockValue: stockValueWithContributions,
-        contributions: contributionsAccumulated,
-        dividends: dividendsWithContributions
+        taxBenefit: taxBenefitRent,
+        netMonthlyCashFlow: Math.round(monthlyCashFlow)
       });
     }
 
@@ -371,8 +346,6 @@ const FinancialAnalyzer = () => {
       'Buy to Live': Math.round(item.netWorth),
       'Buy to Rent': Math.round(calculations.buyToRent[idx].netWorth),
       'Stocks Only': Math.round(calculations.stocksOnly[idx].netWorth),
-      'Stocks + Contributions': params.enableRecurringContributions ? 
-        Math.round(calculations.stocksWithContributions[idx].netWorth) : null
     }));
   }, [calculations, params.enableRecurringContributions]);
 
@@ -390,7 +363,6 @@ const FinancialAnalyzer = () => {
     buyToLive: calculations.buyToLive[finalYear],
     buyToRent: calculations.buyToRent[finalYear],
     stocksOnly: calculations.stocksOnly[finalYear],
-    stocksWithContributions: calculations.stocksWithContributions[finalYear]
   };
 
   const bestStrategy = Object.keys(finalResults).reduce((best, current) => 
@@ -434,7 +406,7 @@ const FinancialAnalyzer = () => {
 
           <div className="p-8">
             <div className="flex gap-2 mb-8 border-b">
-              {['overview', 'parameters', 'analysis'].map((tab) => (
+              {['overview', 'parameters', 'cashflow', 'analysis'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -933,66 +905,56 @@ const FinancialAnalyzer = () => {
                     </div>
                   </div>
 
-                  <div className="bg-blue-100 p-5 rounded-xl border-2 border-blue-300">
-                    <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                        Tax Considerations
-                    </h4>
-                    
-                    <div className="space-y-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={params.enableTaxBenefits}
-                            onChange={(e) => updateParam('enableTaxBenefits', e.target.checked)}
-                            className="w-5 h-5"
-                        />
-                        <span className="text-sm font-medium">Enable Tax Calculations</span>
-                        </label>
-
-                        {params.enableTaxBenefits && (
-                        <>
-                            <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Marginal Tax Rate (%)
-                            </label>
-                            <input
-                                type="number"
-                                value={params.marginalTaxRate}
-                                onChange={(e) => updateParam('marginalTaxRate', e.target.value)}
-                                className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
-                            />
-                            </div>
-
-                            <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Standard Deduction ($)
-                            </label>
-                            <input
-                                type="number"
-                                value={params.standardDeduction}
-                                onChange={(e) => updateParam('standardDeduction', e.target.value)}
-                                className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
-                            />
-                            </div>
-
-                            <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Land Value (% of purchase price)
-                            </label>
-                            <input
-                                type="number"
-                                value={params.landValuePercent}
-                                onChange={(e) => updateParam('landValuePercent', e.target.value)}
-                                className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
-                            />
-                            <p className="text-xs text-gray-600 mt-1">Land doesn't depreciate</p>
-                            </div>
-                        </>
-                        )}
-                    </div>
-                  </div>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'cashflow' && (
+                <div className="space-y-8">
+                    {/* Monthly cost cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-indigo-50 p-6 rounded-xl border-2 border-indigo-200">
+                        <h4 className="font-semibold text-indigo-900 mb-2">Buy to Live</h4>
+                        <p className="text-3xl font-bold text-red-600">
+                        -${formatCurrency(calculations.buyToLive[0].monthlyPayment)}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">per month</p>
+                    </div>
+                    
+                    <div className="bg-green-50 p-6 rounded-xl border-2 border-green-200">
+                        <h4 className="font-semibold text-green-900 mb-2">Buy to Rent</h4>
+                        <p className={`text-3xl font-bold ${calculations.buyToRent[0].monthlyCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {calculations.buyToRent[0].monthlyCashFlow >= 0 ? '+' : ''}{formatCurrency(Math.round(calculations.buyToRent[0].monthlyCashFlow))}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">per month</p>
+                    </div>
+                    
+                    <div className="bg-purple-50 p-6 rounded-xl border-2 border-purple-200">
+                        <h4 className="font-semibold text-purple-900 mb-2">Stocks Only</h4>
+                        <p className="text-3xl font-bold text-gray-600">
+                        ${formatCurrency(Math.round(calculations.stocksOnly[0].monthlyCashFlow))}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">per month</p>
+                    </div>
+                    </div>
+
+                    {/* Line chart */}
+                    <div className="bg-white p-6 rounded-xl shadow-md">
+                    <h4 className="font-semibold text-lg mb-4">Monthly Cash Flow Over Time</h4>
+                    <ResponsiveContainer width="100%" height={400}>
+                        <LineChart data={cashFlowChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="year" />
+                        <YAxis tickFormatter={(value) => `$${formatCurrency(value)}`} />
+                        <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
+                        <Legend />
+                        <Line type="monotone" dataKey="Buy to Live" stroke="#4F46E5" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Buy to Rent" stroke="#10B981" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" strokeWidth={2} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                    </div>
+                </div>
             )}
 
             {activeTab === 'overview' && (
@@ -1064,28 +1026,6 @@ const FinancialAnalyzer = () => {
                     </div>
                   </div>
 
-                  {params.enableRecurringContributions && (
-                    <div className="bg-gradient-to-br from-violet-50 to-violet-100 p-6 rounded-2xl border-2 border-violet-200 shadow-lg">
-                      <div className="flex items-center gap-3 mb-3">
-                        <TrendingUp className="w-7 h-7 text-violet-600" />
-                        <h3 className="font-semibold text-lg text-violet-900">Stocks + DCA</h3>
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-3xl font-bold text-violet-900">
-                          ${formatCurrency(finalResults.stocksWithContributions.netWorth)}
-                        </p>
-                        <p className="text-sm text-gray-600">Final Net Worth</p>
-                        <div className="pt-2 border-t border-violet-200">
-                          <p className="text-sm text-gray-700">
-                            Contributions: ${formatCurrency(finalResults.stocksWithContributions.contributions)}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Principal: ${formatCurrency(finalResults.stocksWithContributions.stockValue)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-l-4 border-yellow-400 p-6 rounded-xl shadow-md">
@@ -1114,10 +1054,6 @@ const FinancialAnalyzer = () => {
                           <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.8}/>
                           <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0.1}/>
                         </linearGradient>
-                        <linearGradient id="colorStocksDCA" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#7C3AED" stopOpacity={0.1}/>
-                        </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                       <XAxis dataKey="year" label={{ value: 'Year', position: 'insideBottom', offset: -5 }} />
@@ -1127,9 +1063,6 @@ const FinancialAnalyzer = () => {
                       <Area type="monotone" dataKey="Buy to Live" stroke="#4F46E5" fillOpacity={1} fill="url(#colorLive)" strokeWidth={2} />
                       <Area type="monotone" dataKey="Buy to Rent" stroke="#10B981" fillOpacity={1} fill="url(#colorRent)" strokeWidth={2} />
                       <Area type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorStocks)" strokeWidth={2} />
-                      {params.enableRecurringContributions && (
-                        <Area type="monotone" dataKey="Stocks + Contributions" stroke="#7C3AED" fillOpacity={1} fill="url(#colorStocksDCA)" strokeWidth={2} />
-                      )}
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -1164,9 +1097,6 @@ const FinancialAnalyzer = () => {
                           <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Buy to Live</th>
                           <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Buy to Rent</th>
                           <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Stocks Only</th>
-                          {params.enableRecurringContributions && (
-                            <th className="px-6 py-4 text-right font-semibold text-gray-900 font-medium">Stocks + DCA</th>
-                          )}
                           <th className="px-6 py-4 text-left font-semibold text-gray-900 font-medium">Winner</th>
                         </tr>
                       </thead>
@@ -1175,13 +1105,11 @@ const FinancialAnalyzer = () => {
                           const live = calculations.buyToLive[year];
                           const rent = calculations.buyToRent[year];
                           const stocks = calculations.stocksOnly[year];
-                          const stocksDCA = calculations.stocksWithContributions[year];
                           
                           const values = {
                             live: live.netWorth,
                             rent: rent.netWorth,
                             stocks: stocks.netWorth,
-                            stocksDCA: params.enableRecurringContributions ? stocksDCA.netWorth : 0
                           };
                           
                           const max = Math.max(...Object.values(values));
@@ -1198,16 +1126,10 @@ const FinancialAnalyzer = () => {
                               <td className={`px-6 py-4 text-right text-gray-900 ${stocks.netWorth === max ? 'font-bold text-purple-600 bg-purple-50 ' : ''}`}>
                                 ${formatCurrency(stocks.netWorth)}
                               </td>
-                              {params.enableRecurringContributions && (
-                                <td className={`px-6 py-4 text-right text-gray-900 ${stocksDCA.netWorth === max ? 'font-bold text-violet-600 bg-violet-50 ' : ''}`}>
-                                  ${formatCurrency(stocksDCA.netWorth)}
-                                </td>
-                              )}
                               <td className="px-6 py-4 text-gray-900 font-medium">
                                 {live.netWorth === max && '🏠 Buy to Live'}
                                 {rent.netWorth === max && '💰 Buy to Rent'}
                                 {stocks.netWorth === max && '📈 Stocks Only'}
-                                {params.enableRecurringContributions && stocksDCA.netWorth === max && '📊 Stocks + DCA'}
                               </td>
                             </tr>
                           );
@@ -1229,7 +1151,6 @@ const FinancialAnalyzer = () => {
                         buyToLive: 'indigo',
                         buyToRent: 'green',
                         stocksOnly: 'purple',
-                        stocksWithContributions: 'violet'
                       };
                       const color = colorMap[strategyKey];
                       
@@ -1313,7 +1234,12 @@ const FinancialAnalyzer = () => {
               </div>
             )}
 
-            {showExplanations && (
+            {showExplanations && (() => {
+                
+                const downPayment = params.housePrice * (params.downPaymentPercent / 100);
+                const loanAmount = params.housePrice - downPayment;
+
+                return (
               <div className="mt-12 bg-gradient-to-br from-gray-50 to-slate-100 rounded-2xl p-8 border-2 border-gray-200">
                 <h3 className="text-2xl font-semibold text-gray-800 border-b-2 border-gray-300 pb-4 mb-6">
                   Calculation Methodology & Formulas
@@ -1335,11 +1261,53 @@ const FinancialAnalyzer = () => {
                       <li>n = Total number of payments (years × 12)</li>
                     </ul>
                     <div className="mt-4 bg-blue-50 p-4 rounded-lg">
-                      <p className="text-sm font-semibold text-blue-900 mb-2">Example:</p>
+                      <p className="text-sm font-semibold text-blue-900 mb-2">Your Example:</p>
                       <p className="text-sm text-gray-700">
-                        For a $268,000 loan at 5% for 30 years: Monthly rate = 0.05/12 = 0.00417, 
-                        n = 360 months. Payment = ${formatCurrency(calculateMortgagePayment(268000, 5, 30))}/month
+                        For your ${formatCurrency(loanAmount)} loan at {params.mortgageRate}% for {params.loanTermYears} years: Monthly rate = {params.mortgageRate}/12 = {(params.mortgageRate/100/12).toFixed(4)}, 
+                        n = {params.loanTermYears * 12} months. Payment = ${formatCurrency(calculateMortgagePayment(loanAmount, params.mortgageRate, params.loanTermYears))}/month
                       </p>
+                    </div>
+                    <div className="mt-4 bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
+                        <p className="text-sm font-semibold text-indigo-900 mb-2">Your Total Monthly Housing Payment Breakdown:</p>
+                        <div className="space-y-1 text-sm text-gray-700">
+                            <div className="flex justify-between">
+                            <span>Principal & Interest (Mortgage):</span>
+                            <span className="font-medium">${formatCurrency(calculateMortgagePayment(loanAmount, params.mortgageRate, params.loanTermYears))}</span>
+                            </div>
+                            {params.downPaymentPercent < params.pmiThreshold && (
+                            <div className="flex justify-between text-amber-700">
+                                <span>PMI (until {params.pmiThreshold}% equity):</span>
+                                <span className="font-medium">${formatCurrency((loanAmount * (params.pmiRate / 100)) / 12)}</span>
+                            </div>
+                            )}
+                            <div className="flex justify-between">
+                            <span>Property Tax:</span>
+                            <span className="font-medium">${formatCurrency((params.housePrice * (params.propertyTaxRate / 100)) / 12)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                            <span>Home Insurance:</span>
+                            <span className="font-medium">${formatCurrency(params.homeInsurance)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                            <span>HOA Fees:</span>
+                            <span className="font-medium">${formatCurrency(params.hoaFees)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                            <span>Maintenance Reserve (1% annually):</span>
+                            <span className="font-medium">${formatCurrency((params.housePrice * (params.maintenancePercent / 100)) / 12)}</span>
+                            </div>
+                            <div className="flex justify-between pt-2 mt-2 border-t-2 border-indigo-300 font-bold text-indigo-900">
+                            <span>TOTAL Monthly Payment:</span>
+                            <span className="text-lg">${formatCurrency(
+                                calculateMortgagePayment(loanAmount, params.mortgageRate, params.loanTermYears) +
+                                (params.downPaymentPercent < params.pmiThreshold ? (loanAmount * (params.pmiRate / 100)) / 12 : 0) +
+                                (params.housePrice * (params.propertyTaxRate / 100)) / 12 +
+                                params.homeInsurance +
+                                params.hoaFees +
+                                (params.housePrice * (params.maintenancePercent / 100)) / 12
+                            )}</span>
+                            </div>
+                        </div>
                     </div>
                   </div>
 
@@ -1354,8 +1322,8 @@ const FinancialAnalyzer = () => {
                     <div className="mt-4 bg-amber-50 p-4 rounded-lg">
                       <p className="text-sm font-semibold text-amber-900 mb-2">Example:</p>
                       <p className="text-sm text-gray-700">
-                        $335,000 home with 10% down ($33,500) = $301,500 loan. 
-                        At 0.5% PMI rate: Annual PMI = $1,508, Monthly PMI = ${formatCurrency(301500 * 0.005 / 12)}/month
+                        For your ${formatCurrency(params.housePrice)} home with {params.downPaymentPercent}% down (${formatCurrency(params.housePrice * (params.downPaymentPercent / 100))}) = ${formatCurrency(loanAmount)} loan.
+                        At 0.5% PMI rate: Annual PMI = $1,508, Monthly PMI = ${formatCurrency(loanAmount * 0.005 / 12)}/month
                       </p>
                     </div>
                   </div>
@@ -1383,9 +1351,9 @@ const FinancialAnalyzer = () => {
                     <div className="mt-4 bg-blue-50 p-4 rounded-lg">
                       <p className="text-sm font-semibold text-blue-900 mb-2">Example (Year 10):</p>
                       <p className="text-sm text-gray-700">
-                        $335,000 home appreciating at 4%/year = ${formatCurrency(335000 * Math.pow(1.04, 10))} value.
-                        Remaining mortgage = ${formatCurrency(calculateRemainingBalance(268000, 5, 360, 120))}.
-                        Home Equity = ${formatCurrency(335000 * Math.pow(1.04, 10) - calculateRemainingBalance(268000, 5, 360, 120))}
+                        ${formatCurrency(params.housePrice)} home appreciating at {params.homeAppreciation}%/year = ${formatCurrency(params.housePrice * Math.pow(1 + params.homeAppreciation / 100, 10))} value.
+                        Remaining mortgage = ${formatCurrency(calculateRemainingBalance(loanAmount, params.mortgageRate, params.loanTermYears, 120))}.
+                        Home Equity = ${formatCurrency(params.housePrice * Math.pow(1 + params.homeAppreciation / 100, 10) - calculateRemainingBalance(loanAmount, params.mortgageRate, params.loanTermYears, 120))}
                       </p>
                     </div>
                   </div>
@@ -1416,10 +1384,10 @@ const FinancialAnalyzer = () => {
                     <div className="mt-4 bg-green-50 p-4 rounded-lg">
                       <p className="text-sm font-semibold text-green-900 mb-2">Example:</p>
                       <p className="text-sm text-gray-700">
-                        Monthly rent of $2,400 with 7% vacancy = $2,232 effective rent. 
-                        8% management fee = $179. Net rent = $2,053.
-                        If expenses = $1,800, cash flow = $253/month invested in stocks.
-                      </p>
+                        Monthly rent of ${formatCurrency(monthlyRentCalculated)} with {params.vacancyRate}% vacancy = ${formatCurrency(monthlyRentCalculated * (1 - (params.vacancyRate / 100)))} effective rent per month.
+                        {params.propertyManagementPercent} % management fee = ${formatCurrency(monthlyRentCalculated * (1 - params.vacancyRate / 100) * (params.propertyManagementPercent / 100))} per month. Net rent = ${formatCurrency(monthlyRentCalculated * (1 - params.vacancyRate / 100) - monthlyRentCalculated * (1 - params.vacancyRate / 100) * (params.propertyManagementPercent / 100))}.
+                        If expenses = $1,800, cash flow = ${formatCurrency(monthlyRentCalculated * (1 - params.vacancyRate / 100) - monthlyRentCalculated * (1 - params.vacancyRate / 100) * (params.propertyManagementPercent / 100) - 1800)} per month.
+                      </p>    
                     </div>
                   </div>
 
@@ -1450,8 +1418,18 @@ const FinancialAnalyzer = () => {
                     <div className="mt-4 bg-purple-50 p-4 rounded-lg">
                       <p className="text-sm font-semibold text-purple-900 mb-2">Example (10 years):</p>
                       <p className="text-sm text-gray-700">
-                        $67,000 initial at 7.5% return = ${formatCurrency(67000 * Math.pow(1.075, 10))}.
-                        With $500/month contributions = ${formatCurrency(67000 * Math.pow(1.075, 10) + (6000 * (Math.pow(1.075, 10) - 1) / 0.075))} (using annuity formula).
+                        ${formatCurrency(params.initialCash)} initial at {params.stockReturn}% return = ${formatCurrency(params.initialCash * Math.pow(1 + params.stockReturn / 100, 10))}.
+                        
+                        With ${formatCurrency(params.contributionAmount)} monthly contributions ({params.contributionFrequency === 'monthly' ? '$' + formatCurrency(params.contributionAmount * 12) : '$' + formatCurrency(params.contributionAmount)} per year) over 10 years = approximately ${formatCurrency(
+                        (() => {
+                            const monthlyRate = params.stockReturn / 100 / 12;
+                            const months = 10 * 12;
+                            const yearlyContribution = params.contributionFrequency === 'monthly' ? params.contributionAmount * 12 : params.contributionAmount;
+                            // Future value of annuity formula
+                            return yearlyContribution * ((Math.pow(1 + params.stockReturn / 100, 10) - 1) / (params.stockReturn / 100));
+                        })()
+                        )} from contributions alone.
+                        
                       </p>
                     </div>
                   </div>
@@ -1487,9 +1465,11 @@ const FinancialAnalyzer = () => {
                   </div>
                 </div>
               </div>
-            )}
+                );
+            })()}
           </div>
         </div>
+        
 
         <div className="text-center text-gray-600 text-sm mt-8 pb-4">
           <p>Interactive Investment Strategy Calculator • Adjust parameters to explore scenarios</p>
