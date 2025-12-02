@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import { Calculator, TrendingUp, Home, DollarSign, Info, Settings, HelpCircle, Wallet } from 'lucide-react';
+import { Calculator, TrendingUp, Home, DollarSign, Info, Settings, HelpCircle, Wallet, Trophy, CheckCircle, Lightbulb, AlertTriangle, AlertCircle, ChevronDown } from 'lucide-react';
 
 const FinancialAnalyzer = () => {
   const [params, setParams] = useState({
@@ -75,6 +75,9 @@ const FinancialAnalyzer = () => {
   const [showExplanations, setShowExplanations] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [hoveredTooltip, setHoveredTooltip] = useState(null);
+  const [expandedMisconception, setExpandedMisconception] = useState(null);
+  const [showMisconceptions, setShowMisconceptions] = useState(true);
+  const [selectedBreakdownStrategy, setSelectedBreakdownStrategy] = useState('buyToLive');
 
   const paramDefinitions = {
     housePrice: "The purchase price of the property you're considering buying.",
@@ -123,7 +126,7 @@ const FinancialAnalyzer = () => {
 
   const InfoTooltip = ({ param }) => (
     <div className="relative inline-block">
-      <HelpCircle 
+      <HelpCircle
         className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help ml-1 inline-block"
         onMouseEnter={() => setHoveredTooltip(param)}
         onMouseLeave={() => setHoveredTooltip(null)}
@@ -136,6 +139,39 @@ const FinancialAnalyzer = () => {
       )}
     </div>
   );
+
+  const MathTooltip = ({ id, title, lines, note }) => {
+    const [isHovered, setIsHovered] = useState(false);
+
+    return (
+      <div className="relative inline-block group">
+        <Calculator
+          className="w-4 h-4 text-gray-400 hover:text-indigo-600 cursor-help ml-2 inline-block transition"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        />
+        {isHovered && (
+          <div className="absolute z-50 w-80 p-4 bg-gray-900 text-white text-sm rounded-lg shadow-2xl -top-2 left-6">
+            <div className="absolute w-2 h-2 bg-gray-900 transform rotate-45 -left-1 top-3"></div>
+            <p className="font-semibold mb-2 text-indigo-300">{title}</p>
+            <div className="space-y-1">
+              {lines.map((line, idx) => (
+                <div key={idx} className={`flex justify-between ${line.isBorder ? 'border-t border-gray-600 pt-1 mt-1' : ''}`}>
+                  <span className={line.isTotal ? 'font-semibold' : ''}>{line.label}</span>
+                  <span className={`font-mono ${line.isPositive ? 'text-green-400' : line.isNegative ? 'text-red-400' : line.isTotal ? 'font-semibold text-white' : 'text-gray-300'}`}>
+                    {line.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {note && (
+              <p className="text-xs text-gray-400 mt-3 italic">{note}</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const updateParam = (key, value) => {
     setParams(prev => ({ ...prev, [key]: typeof value === 'boolean' ? value : (parseFloat(value) || 0) }));
@@ -666,12 +702,12 @@ const FinancialAnalyzer = () => {
           </div>
 
           <div className="p-8">
-            <div className="flex gap-2 mb-8 border-b">
-              {['overview', 'personal', 'parameters', 'cashflow', 'analysis'].map((tab) => (
+            <div className="flex gap-2 mb-8 border-b overflow-x-auto">
+              {['overview', 'personal', 'breakdown', 'parameters', 'cashflow', 'analysis'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-3 font-medium transition ${
+                  className={`px-6 py-3 font-medium transition whitespace-nowrap ${
                     activeTab === tab
                       ? 'border-b-2 border-indigo-600 text-indigo-600'
                       : 'text-gray-500 hover:text-gray-700'
@@ -682,6 +718,8 @@ const FinancialAnalyzer = () => {
                       <Wallet className="w-4 h-4" />
                       Personal Finance
                     </span>
+                  ) : tab === 'breakdown' ? (
+                    'Detailed Breakdown'
                   ) : (
                     tab.charAt(0).toUpperCase() + tab.slice(1)
                   )}
@@ -782,7 +820,19 @@ const FinancialAnalyzer = () => {
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <p className="text-sm text-indigo-700 mb-1">Final Net Worth</p>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-sm text-indigo-700">Final Net Worth</p>
+                          <MathTooltip
+                            id="buyToLive-networth"
+                            title="Net Worth Breakdown:"
+                            lines={[
+                              { label: 'Home Equity', value: `$${formatCurrency(finalResults.buyToLive.homeEquity)}`, isPositive: true },
+                              { label: 'Stock Portfolio', value: `$${formatCurrency(finalResults.buyToLive.stockValue)}`, isPositive: true },
+                              { label: 'Total Net Worth', value: `$${formatCurrency(finalResults.buyToLive.netWorth)}`, isTotal: true, isBorder: true }
+                            ]}
+                            note={`After ${params.yearsToAnalyze} years of homeownership and investing.`}
+                          />
+                        </div>
                         <p className="text-3xl font-bold text-gray-900">
                           ${formatCurrency(finalResults.buyToLive.netWorth)}
                         </p>
@@ -794,7 +844,21 @@ const FinancialAnalyzer = () => {
                         </p>
                       </div>
                       <div className="pt-2 border-t border-indigo-300">
-                        <p className="text-sm text-indigo-700">Stock Portfolio</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-indigo-700">Stock Portfolio</p>
+                          <MathTooltip
+                            id="buyToLive-stocks"
+                            title="Stock Portfolio Breakdown:"
+                            lines={[
+                              { label: 'Initial Investment', value: `$${formatCurrency(params.initialCash - (params.housePrice * (params.downPaymentPercent / 100)))}`, isPositive: true },
+                              { label: 'Monthly Contributions', value: `$${formatCurrency(finalResults.buyToLive.monthlyContributions)}`, isPositive: true },
+                              { label: 'Dividends', value: `$${formatCurrency(finalResults.buyToLive.dividends)}`, isPositive: true },
+                              { label: 'Growth from Returns', value: `$${formatCurrency(finalResults.buyToLive.stockValueBase - (params.initialCash - (params.housePrice * (params.downPaymentPercent / 100))))}`, isPositive: true },
+                              { label: 'Total Stock Value', value: `$${formatCurrency(finalResults.buyToLive.stockValue)}`, isTotal: true, isBorder: true }
+                            ]}
+                            note={`Leftover cash after down payment grows at ${params.stockReturn}% annually.`}
+                          />
+                        </div>
                         <p className="text-lg font-semibold text-gray-800">
                           ${formatCurrency(finalResults.buyToLive.stockValue)}
                         </p>
@@ -805,6 +869,44 @@ const FinancialAnalyzer = () => {
                           -${formatCurrency(finalResults.buyToLive.monthlyPayment)}
                         </p>
                       </div>
+
+                      {/* Reality Check Warnings */}
+                      {params.downPaymentPercent < params.pmiThreshold && (
+                        <div className="mt-4 bg-amber-50 border-l-4 border-amber-500 p-3 rounded">
+                          <div className="flex items-start gap-2">
+                            <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-semibold text-amber-900 text-sm">PMI Required</p>
+                              <p className="text-xs text-amber-800 mt-1">
+                                You're paying <strong>${formatCurrency(calculations.buyToLive[0].monthlyPMI)}/month</strong> in PMI because your down payment is {params.downPaymentPercent}% (below {params.pmiThreshold}%).
+                              </p>
+                              <p className="text-xs text-amber-700 mt-1">
+                                PMI will be removed at year <strong>{(() => {
+                                  for (let year = 1; year <= params.yearsToAnalyze; year++) {
+                                    const equity = ((calculations.buyToLive[year].homeValue - calculations.buyToLive[year].remainingMortgage) / calculations.buyToLive[year].homeValue) * 100;
+                                    if (equity >= params.pmiThreshold) return year;
+                                  }
+                                  return params.yearsToAnalyze;
+                                })()}</strong> when you reach {params.pmiThreshold}% equity.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {params.initialCash < (params.housePrice * (params.downPaymentPercent / 100)) && (
+                        <div className="mt-4 bg-red-50 border-l-4 border-red-500 p-3 rounded">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-semibold text-red-900 text-sm">Insufficient Cash</p>
+                              <p className="text-xs text-red-800 mt-1">
+                                You need <strong>${formatCurrency((params.housePrice * (params.downPaymentPercent / 100)) - params.initialCash)}</strong> more to afford this down payment.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -839,6 +941,27 @@ const FinancialAnalyzer = () => {
                           {finalResults.buyToRent.monthlyCashFlow >= 0 ? '+' : ''}${formatCurrency(Math.abs(finalResults.buyToRent.monthlyCashFlow))}
                         </p>
                       </div>
+
+                      {/* Reality Check Warnings */}
+                      {calculations.buyToRent[0].monthlyCashFlow < 0 && (
+                        <div className="mt-4 bg-red-50 border-l-4 border-red-500 p-3 rounded">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-semibold text-red-900 text-sm">Negative Cash Flow</p>
+                              <p className="text-xs text-red-800 mt-1">
+                                Rental property loses <strong>${formatCurrency(Math.abs(calculations.buyToRent[0].monthlyCashFlow))}/month</strong> (<strong>${formatCurrency(Math.abs(calculations.buyToRent[0].monthlyCashFlow * 12))}/year</strong>).
+                              </p>
+                              <p className="text-xs text-amber-800 mt-2 font-semibold">To break even:</p>
+                              <ul className="text-xs text-amber-700 mt-1 ml-4 space-y-0.5">
+                                <li>• Raise rent to <strong>${formatCurrency(monthlyRentCalculated + Math.abs(calculations.buyToRent[0].monthlyCashFlow))}/month</strong>, OR</li>
+                                <li>• Reduce vacancy to <strong>{Math.max(0, params.vacancyRate - 3)}%</strong>, OR</li>
+                                <li>• Target better rent-to-price ratio market</li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -850,7 +973,19 @@ const FinancialAnalyzer = () => {
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <p className="text-sm text-amber-700 mb-1">Final Net Worth</p>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-sm text-amber-700">Final Net Worth</p>
+                          <MathTooltip
+                            id="rentToLive-networth"
+                            title="Net Worth Breakdown:"
+                            lines={[
+                              { label: 'Home Equity', value: `$0`, isNegative: true },
+                              { label: 'Stock Portfolio', value: `$${formatCurrency(finalResults.rentToLive.stockValue)}`, isPositive: true },
+                              { label: 'Total Net Worth', value: `$${formatCurrency(finalResults.rentToLive.netWorth)}`, isTotal: true, isBorder: true }
+                            ]}
+                            note="All wealth in liquid stocks - no real estate."
+                          />
+                        </div>
                         <p className="text-3xl font-bold text-gray-900">
                           ${formatCurrency(finalResults.rentToLive.netWorth)}
                         </p>
@@ -862,7 +997,21 @@ const FinancialAnalyzer = () => {
                         </p>
                       </div>
                       <div className="pt-2 border-t border-amber-300">
-                        <p className="text-sm text-amber-700">Stock Portfolio</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-amber-700">Stock Portfolio</p>
+                          <MathTooltip
+                            id="rentToLive-stocks"
+                            title="Stock Portfolio Breakdown:"
+                            lines={[
+                              { label: 'Initial Investment', value: `$${formatCurrency(params.initialCash)}`, isPositive: true },
+                              { label: 'Monthly Contributions', value: `$${formatCurrency(finalResults.rentToLive.monthlyContributions)}`, isPositive: true },
+                              { label: 'Dividends', value: `$${formatCurrency(finalResults.rentToLive.dividends)}`, isPositive: true },
+                              { label: 'Growth from Returns', value: `$${formatCurrency(finalResults.rentToLive.stockValueBase - params.initialCash)}`, isPositive: true },
+                              { label: 'Total Stock Value', value: `$${formatCurrency(finalResults.rentToLive.stockValue)}`, isTotal: true, isBorder: true }
+                            ]}
+                            note={`All cash invested at ${params.stockReturn}% annually with ${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}/month contributions.`}
+                          />
+                        </div>
                         <p className="text-lg font-semibold text-gray-800">
                           ${formatCurrency(finalResults.rentToLive.stockValue)}
                         </p>
@@ -928,6 +1077,322 @@ const FinancialAnalyzer = () => {
                   </p>
                 </div>
 
+                {/* Why Did This Win? Explanation */}
+                <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-8 rounded-2xl border-2 border-indigo-300 shadow-xl">
+                  <div className="flex items-center gap-3 mb-6">
+                    <Trophy className="w-8 h-8 text-indigo-600" />
+                    <h3 className="text-2xl font-bold text-indigo-900">Why Did This Win?</h3>
+                  </div>
+
+                  {bestStrategy === 'buyToLive' && (
+                    <div className="space-y-4">
+                      <p className="text-gray-700 text-lg mb-4">
+                        <strong>Own Your Home</strong> came out ahead by building wealth through both home equity and stock investments. Here's why:
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Leverage Effect</p>
+                            <p className="text-gray-700">Your ${formatCurrency(params.housePrice * (params.downPaymentPercent / 100))} down payment controls a ${formatCurrency(params.housePrice)} asset that appreciated to <strong>${formatCurrency(finalResults.buyToLive.homeValue)}</strong>. That's a {((finalResults.buyToLive.homeValue / (params.housePrice * (params.downPaymentPercent / 100)) - 1) * 100).toFixed(0)}x return on your initial investment!</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Forced Savings Through Mortgage</p>
+                            <p className="text-gray-700">Every mortgage payment builds equity. You built <strong>${formatCurrency(finalResults.buyToLive.homeEquity)}</strong> in home equity over {params.yearsToAnalyze} years.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Still Investing in Stocks</p>
+                            <p className="text-gray-700">You invested ${formatCurrency(params.initialCash - (params.housePrice * (params.downPaymentPercent / 100)))} initially, plus ${formatCurrency(calculations.buyToLive[finalYear].monthlyLeftover)} per month in leftover cash, building a <strong>${formatCurrency(finalResults.buyToLive.stockValue)}</strong> stock portfolio.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Total Wealth Breakdown</p>
+                            <p className="text-gray-700">
+                              Home Equity: <strong>${formatCurrency(finalResults.buyToLive.homeEquity)}</strong> +
+                              Stock Portfolio: <strong>${formatCurrency(finalResults.buyToLive.stockValue)}</strong> =
+                              <strong className="text-indigo-600"> ${formatCurrency(finalResults.buyToLive.netWorth)}</strong> total
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {bestStrategy === 'rentToLive' && (
+                    <div className="space-y-4">
+                      <p className="text-gray-700 text-lg mb-4">
+                        <strong>Rent & Invest More</strong> won by maximizing stock market exposure with lower monthly costs. Here's why:
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Lower Monthly Costs</p>
+                            <p className="text-gray-700">Renting costs ${formatCurrency(calculations.rentToLive[0].monthlyRentCost)}/month vs ${formatCurrency(buyToLiveMonthlyPayment)}/month to own. That's <strong>${formatCurrency(buyToLiveMonthlyPayment - calculations.rentToLive[0].monthlyRentCost)}/month more</strong> to invest in stocks.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">More Cash to Invest</p>
+                            <p className="text-gray-700">You invested all ${formatCurrency(params.initialCash)} of your initial cash (no down payment), plus ${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}/month in leftover cash.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Flexibility Benefits</p>
+                            <p className="text-gray-700">No maintenance costs (${formatCurrency((params.housePrice * (params.maintenancePercent / 100)) / 12)}/month saved), no property taxes (${formatCurrency((params.housePrice * (params.propertyTaxRate / 100)) / 12)}/month saved), and freedom to move for better job opportunities.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Stock Market Returns</p>
+                            <p className="text-gray-700">Your stock portfolio grew to <strong className="text-amber-600">${formatCurrency(finalResults.rentToLive.netWorth)}</strong> with {params.stockReturn}% annual returns over {params.yearsToAnalyze} years.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {bestStrategy === 'buyToRent' && (
+                    <div className="space-y-4">
+                      <p className="text-gray-700 text-lg mb-4">
+                        <strong>Buy Rental Property</strong> won through rental income, property appreciation, and stock investments. Here's why:
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Rental Income Offsetting Costs</p>
+                            <p className="text-gray-700">Your property generates ${formatCurrency(finalResults.buyToRent.monthlyRent)}/month in rental income (after vacancy and management fees), {finalResults.buyToRent.monthlyCashFlow >= 0 ? 'creating' : 'with expenses of'} ${formatCurrency(Math.abs(finalResults.buyToRent.monthlyCashFlow))}/month cash flow.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Property Appreciation</p>
+                            <p className="text-gray-700">The property appreciated from ${formatCurrency(params.housePrice)} to <strong>${formatCurrency(finalResults.buyToRent.homeValue)}</strong>, building ${formatCurrency(finalResults.buyToRent.homeEquity)} in equity.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Stock Investments from Rental Profits</p>
+                            <p className="text-gray-700">You invested ${formatCurrency(params.initialCash - (params.housePrice * (params.downPaymentPercent / 100)))} initially, plus rental profits, building a <strong>${formatCurrency(finalResults.buyToRent.stockValue)}</strong> stock portfolio.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Combined Wealth</p>
+                            <p className="text-gray-700">
+                              Home Equity: <strong>${formatCurrency(finalResults.buyToRent.homeEquity)}</strong> +
+                              Stock Portfolio: <strong>${formatCurrency(finalResults.buyToRent.stockValue)}</strong> =
+                              <strong className="text-green-600"> ${formatCurrency(finalResults.buyToRent.netWorth)}</strong> total
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {bestStrategy === 'stocksOnly' && (
+                    <div className="space-y-4">
+                      <p className="text-gray-700 text-lg mb-4">
+                        <strong>Skip Homeownership</strong> won with pure stock market exposure. Here's why:
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Maximum Stock Investment</p>
+                            <p className="text-gray-700">You invested all ${formatCurrency(params.initialCash)} of your initial cash immediately into stocks{params.enableRecurringContributions ? `, plus ${formatCurrency(params.contributionAmount)}/month in recurring contributions` : ''}.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">No Debt Burden</p>
+                            <p className="text-gray-700">No mortgage debt means all gains are yours. No interest payments, no property taxes, no maintenance costs eating into returns.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                          <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                          <div>
+                            <p className="font-semibold text-gray-900">Strong Market Performance</p>
+                            <p className="text-gray-700">With {params.stockReturn}% annual returns over {params.yearsToAnalyze} years, your portfolio grew to <strong className="text-purple-600">${formatCurrency(finalResults.stocksOnly.netWorth)}</strong>.</p>
+                          </div>
+                        </div>
+                        {params.dividendYield > 0 && params.dividendsReinvested && (
+                          <div className="flex items-start gap-3 bg-white p-4 rounded-xl">
+                            <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                            <div>
+                              <p className="font-semibold text-gray-900">Dividend Compounding</p>
+                              <p className="text-gray-700">Reinvesting {params.dividendYield}% dividend yield accelerated growth. Dividends contributed <strong>${formatCurrency(finalResults.stocksOnly.dividends)}</strong> to your final portfolio.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Common Misconceptions Section */}
+                <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-lg">
+                  <button
+                    onClick={() => setShowMisconceptions(!showMisconceptions)}
+                    className="w-full flex items-center justify-between mb-4"
+                  >
+                    <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                      <Lightbulb className="w-7 h-7 text-yellow-500" />
+                      Common Questions & Misconceptions
+                    </h3>
+                    <ChevronDown className={`w-6 h-6 text-gray-600 transition-transform ${showMisconceptions ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showMisconceptions && (
+                    <div className="space-y-4">
+                      {/* Misconception 1: Rental property always generates passive income */}
+                      <div className="border-l-4 border-red-500 bg-red-50 p-4 rounded-lg">
+                        <button
+                          onClick={() => setExpandedMisconception(expandedMisconception === 1 ? null : 1)}
+                          className="w-full text-left flex items-start gap-3"
+                        >
+                          <div className="text-2xl">❌</div>
+                          <div className="flex-1">
+                            <p className="font-bold text-red-900 text-lg">Misconception: "Rental property always generates passive income"</p>
+                            <ChevronDown className={`w-5 h-5 text-red-700 inline-block ml-2 transition-transform ${expandedMisconception === 1 ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+                        {expandedMisconception === 1 && (
+                          <div className="mt-3 pl-11 text-gray-700">
+                            <p className="font-semibold text-red-800 mb-2">Reality Check:</p>
+                            <p className="mb-3">With your current numbers, the rental property generates <strong className={calculations.buyToRent[0].monthlyCashFlow >= 0 ? 'text-green-700' : 'text-red-700'}>{calculations.buyToRent[0].monthlyCashFlow >= 0 ? '+' : ''} ${formatCurrency(calculations.buyToRent[0].monthlyCashFlow)}</strong> per month in cash flow.</p>
+                            {calculations.buyToRent[0].monthlyCashFlow < 0 && (
+                              <>
+                                <p className="mb-2">That's a <strong className="text-red-700">${formatCurrency(Math.abs(calculations.buyToRent[0].monthlyCashFlow * 12))}/year loss</strong>!</p>
+                                <div className="bg-white p-3 rounded-lg mt-3 border border-red-200">
+                                  <p className="font-semibold text-gray-900 mb-2">To break even, you'd need to:</p>
+                                  <ul className="text-sm space-y-1 ml-4">
+                                    <li>• Raise rent to <strong>${formatCurrency(monthlyRentCalculated + Math.abs(calculations.buyToRent[0].monthlyCashFlow))}/month</strong>, OR</li>
+                                    <li>• Reduce vacancy rate to <strong>{Math.max(0, params.vacancyRate - 3)}%</strong>, OR</li>
+                                    <li>• Buy in a market with better rent-to-price ratio</li>
+                                  </ul>
+                                </div>
+                              </>
+                            )}
+                            <p className="text-sm text-gray-600 mt-3 italic">Rental income: ${formatCurrency(calculations.buyToRent[0].monthlyRent)} - Expenses: ${formatCurrency(calculations.buyToRent[0].monthlyExpenses)} = ${formatCurrency(calculations.buyToRent[0].monthlyCashFlow)}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Misconception 2: Renting is throwing money away */}
+                      <div className="border-l-4 border-green-500 bg-green-50 p-4 rounded-lg">
+                        <button
+                          onClick={() => setExpandedMisconception(expandedMisconception === 2 ? null : 2)}
+                          className="w-full text-left flex items-start gap-3"
+                        >
+                          <div className="text-2xl">✅</div>
+                          <div className="flex-1">
+                            <p className="font-bold text-green-900 text-lg">Truth: "Renting lets you invest MORE money"</p>
+                            <ChevronDown className={`w-5 h-5 text-green-700 inline-block ml-2 transition-transform ${expandedMisconception === 2 ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+                        {expandedMisconception === 2 && (
+                          <div className="mt-3 pl-11 text-gray-700">
+                            <p className="mb-3">When you rent, you have <strong className="text-green-700">${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}/month</strong> to invest.</p>
+                            <p className="mb-3">When you buy, you only have <strong className="text-indigo-700">${formatCurrency(calculations.buyToLive[0].monthlyLeftover)}/month</strong> to invest.</p>
+                            <div className="bg-white p-4 rounded-lg border border-green-200">
+                              <p className="font-semibold text-gray-900 mb-2">The Math:</p>
+                              <p className="text-gray-800 font-mono">
+                                Rent: ${formatCurrency(calculations.rentToLive[0].monthlyLeftover)} - Own: ${formatCurrency(calculations.buyToLive[0].monthlyLeftover)} =
+                                <strong className="text-green-700"> ${formatCurrency(calculations.rentToLive[0].monthlyLeftover - calculations.buyToLive[0].monthlyLeftover)}/month more</strong> to invest
+                              </p>
+                              <p className="text-sm text-gray-600 mt-2">That's <strong>${formatCurrency((calculations.rentToLive[0].monthlyLeftover - calculations.buyToLive[0].monthlyLeftover) * 12)}/year</strong> extra going into stocks!</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Misconception 3: But homeownership still wins because... */}
+                      <div className="border-l-4 border-amber-500 bg-amber-50 p-4 rounded-lg">
+                        <button
+                          onClick={() => setExpandedMisconception(expandedMisconception === 3 ? null : 3)}
+                          className="w-full text-left flex items-start gap-3"
+                        >
+                          <div className="text-2xl">🤔</div>
+                          <div className="flex-1">
+                            <p className="font-bold text-amber-900 text-lg">Explanation: "But homeownership still wins because of leverage"</p>
+                            <ChevronDown className={`w-5 h-5 text-amber-700 inline-block ml-2 transition-transform ${expandedMisconception === 3 ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+                        {expandedMisconception === 3 && (
+                          <div className="mt-3 pl-11 text-gray-700">
+                            <p className="mb-3">Even though renters can invest more monthly, homeowners often build more wealth through <strong>leverage</strong>.</p>
+                            <div className="bg-white p-4 rounded-lg border border-amber-200 mb-3">
+                              <p className="font-semibold text-gray-900 mb-2">Leverage Effect:</p>
+                              <p className="mb-2">Your <strong className="text-indigo-700">${formatCurrency(params.housePrice * (params.downPaymentPercent / 100))}</strong> down payment controls a <strong className="text-indigo-700">${formatCurrency(params.housePrice)}</strong> asset.</p>
+                              <p className="mb-2">At {params.homeAppreciation}% appreciation, you gain <strong className="text-green-700">${formatCurrency(params.housePrice * (params.homeAppreciation / 100))}/year</strong> on the full home value.</p>
+                              <p className="text-sm">That's a <strong className="text-indigo-700">{((params.homeAppreciation / (params.downPaymentPercent)) * 100).toFixed(1)}%</strong> return on your down payment! (Leverage multiplier: {(100 / params.downPaymentPercent).toFixed(1)}x)</p>
+                            </div>
+                            <p className="text-sm text-gray-600 italic">This is why "Own Your Home" often beats "Rent & Invest" even with lower monthly contributions.</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Misconception 4: Why does Rent & Invest have more monthly cash but less final wealth? */}
+                      <div className="border-l-4 border-purple-500 bg-purple-50 p-4 rounded-lg">
+                        <button
+                          onClick={() => setExpandedMisconception(expandedMisconception === 4 ? null : 4)}
+                          className="w-full text-left flex items-start gap-3"
+                        >
+                          <div className="text-2xl">🤔</div>
+                          <div className="flex-1">
+                            <p className="font-bold text-purple-900 text-lg">Question: "Why does Rent & Invest have more monthly cash but {finalResults.rentToLive.netWorth > finalResults.buyToLive.netWorth ? 'MORE' : 'less'} final wealth?"</p>
+                            <ChevronDown className={`w-5 h-5 text-purple-700 inline-block ml-2 transition-transform ${expandedMisconception === 4 ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+                        {expandedMisconception === 4 && (
+                          <div className="mt-3 pl-11 text-gray-700">
+                            {finalResults.rentToLive.netWorth > finalResults.buyToLive.netWorth ? (
+                              <>
+                                <p className="mb-3">In your scenario, Rent & Invest actually WINS with <strong className="text-green-700">${formatCurrency(finalResults.rentToLive.netWorth)}</strong> vs <strong className="text-indigo-700">${formatCurrency(finalResults.buyToLive.netWorth)}</strong>!</p>
+                                <p className="mb-3">This happens when:</p>
+                                <ul className="list-disc ml-6 space-y-1 mb-3">
+                                  <li>Rent is significantly lower than mortgage costs</li>
+                                  <li>Stock returns ({params.stockReturn}%) outpace home appreciation ({params.homeAppreciation}%)</li>
+                                  <li>The extra monthly investment compounds over time</li>
+                                </ul>
+                              </>
+                            ) : (
+                              <>
+                                <p className="mb-3">Even though renters invest <strong className="text-green-700">${formatCurrency(calculations.rentToLive[0].monthlyLeftover - calculations.buyToLive[0].monthlyLeftover)}/month MORE</strong>, they end up with <strong className="text-red-700">${formatCurrency(finalResults.buyToLive.netWorth - finalResults.rentToLive.netWorth)}</strong> LESS wealth.</p>
+                                <div className="bg-white p-4 rounded-lg border border-purple-200 mb-3">
+                                  <p className="font-semibold text-gray-900 mb-2">The Leverage Compounding Effect:</p>
+                                  <p className="mb-2">Year 1: Home gains ${formatCurrency(params.housePrice * (params.homeAppreciation / 100))} vs Stock gains ${formatCurrency((params.initialCash - (params.housePrice * (params.downPaymentPercent / 100))) * (params.stockReturn / 100))}</p>
+                                  <p className="mb-2">Year {Math.floor(params.yearsToAnalyze / 2)}: Home gains ${formatCurrency(params.housePrice * Math.pow(1 + params.homeAppreciation / 100, Math.floor(params.yearsToAnalyze / 2)) * (params.homeAppreciation / 100))}</p>
+                                  <p className="text-sm text-gray-600">Leverage amplifies gains on the FULL home value, not just your down payment.</p>
+                                </div>
+                                <p className="text-sm text-gray-600 italic">Over {params.yearsToAnalyze} years, the compounding effect of leverage on the full home value outweighs the extra monthly contributions from renting.</p>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <h3 className="text-2xl font-semibold mb-4 text-gray-800">Net Worth Over Time</h3>
                   <ResponsiveContainer width="100%" height={450}>
@@ -979,6 +1444,160 @@ const FinancialAnalyzer = () => {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* Strategy Crossover Analysis */}
+                {(() => {
+                  // Find crossover year where Own Your Home surpasses Rent & Invest More
+                  let crossoverRent = null;
+                  for (let year = 1; year <= params.yearsToAnalyze; year++) {
+                    if (calculations.buyToLive[year].netWorth > calculations.rentToLive[year].netWorth &&
+                        calculations.buyToLive[year - 1].netWorth <= calculations.rentToLive[year - 1].netWorth) {
+                      crossoverRent = year;
+                      break;
+                    }
+                  }
+
+                  // Find crossover year where Own Your Home surpasses Buy Rental Property
+                  let crossoverRental = null;
+                  for (let year = 1; year <= params.yearsToAnalyze; year++) {
+                    if (calculations.buyToLive[year].netWorth > calculations.buyToRent[year].netWorth &&
+                        calculations.buyToLive[year - 1].netWorth <= calculations.buyToRent[year - 1].netWorth) {
+                      crossoverRental = year;
+                      break;
+                    }
+                  }
+
+                  // Only show if there's at least one crossover
+                  if (!crossoverRent && !crossoverRental && bestStrategy === 'buyToLive') {
+                    return null;
+                  }
+
+                  return (
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl border-2 border-indigo-200 shadow-lg">
+                      <h3 className="text-2xl font-bold text-indigo-900 mb-4 flex items-center gap-2">
+                        <TrendingUp className="w-7 h-7" />
+                        Strategy Crossover Analysis: When Does Ownership Win?
+                      </h3>
+
+                      {crossoverRent && (
+                        <div className="mb-6">
+                          <h4 className="font-semibold text-gray-900 mb-3 text-lg">Own Your Home vs Rent & Invest More</h4>
+                          <div className="space-y-3">
+                            {/* Timeline visualization */}
+                            <div className="bg-white p-4 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                {/* Before crossover */}
+                                <div className="flex-1">
+                                  <div className="text-xs text-gray-600 mb-1">Years 1-{crossoverRent - 1}</div>
+                                  <div className="h-10 bg-gradient-to-r from-amber-400 to-amber-500 rounded-l-lg flex items-center justify-center text-white font-semibold text-sm">
+                                    Rent & Invest AHEAD
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1">Lower housing costs = more to invest</p>
+                                </div>
+
+                                {/* Crossover point */}
+                                <div className="flex flex-col items-center px-4">
+                                  <Trophy className="w-8 h-8 text-yellow-500 mb-1" />
+                                  <div className="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-lg font-bold text-center border-2 border-yellow-600">
+                                    Year {crossoverRent}
+                                  </div>
+                                  <p className="text-xs text-gray-700 font-semibold mt-1">Crossover!</p>
+                                </div>
+
+                                {/* After crossover */}
+                                <div className="flex-1">
+                                  <div className="text-xs text-gray-600 mb-1">Years {crossoverRent + 1}-{params.yearsToAnalyze}</div>
+                                  <div className="h-10 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-r-lg flex items-center justify-center text-white font-semibold text-sm">
+                                    Own Home AHEAD
+                                  </div>
+                                  <p className="text-xs text-gray-600 mt-1">Leverage effect compounds</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Explanation */}
+                            <div className="bg-white p-4 rounded-lg border border-indigo-200">
+                              <p className="text-gray-700 mb-2">
+                                <strong className="text-indigo-900">Why the crossover happens:</strong>
+                              </p>
+                              <ul className="text-sm text-gray-700 space-y-1 ml-4">
+                                <li>• <strong>Early years:</strong> Renting wins because you invest ${formatCurrency((calculations.rentToLive[0].monthlyLeftover - calculations.buyToLive[0].monthlyLeftover) * 12)}/year more</li>
+                                <li>• <strong>Year {crossoverRent}:</strong> Leverage effect catches up. Your ${formatCurrency(params.housePrice * (params.downPaymentPercent / 100))} down payment now controls ${formatCurrency(calculations.buyToLive[crossoverRent].homeValue)} in assets</li>
+                                <li>• <strong>Later years:</strong> Home equity (${formatCurrency(finalResults.buyToLive.homeEquity)}) + stocks (${formatCurrency(finalResults.buyToLive.stockValue)}) outpaces pure stock portfolio (${formatCurrency(finalResults.rentToLive.netWorth)})</li>
+                              </ul>
+                            </div>
+
+                            {/* Net worth at crossover */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+                                <p className="text-xs text-amber-700 mb-1">Rent & Invest @ Year {crossoverRent}</p>
+                                <p className="text-xl font-bold text-amber-900">${formatCurrency(calculations.rentToLive[crossoverRent].netWorth)}</p>
+                              </div>
+                              <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                                <p className="text-xs text-indigo-700 mb-1">Own Home @ Year {crossoverRent}</p>
+                                <p className="text-xl font-bold text-indigo-900">${formatCurrency(calculations.buyToLive[crossoverRent].netWorth)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {crossoverRental && (
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-3 text-lg">Own Your Home vs Buy Rental Property</h4>
+                          <div className="space-y-3">
+                            {/* Timeline visualization */}
+                            <div className="bg-white p-4 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                {/* Before crossover */}
+                                <div className="flex-1">
+                                  <div className="text-xs text-gray-600 mb-1">Years 1-{crossoverRental - 1}</div>
+                                  <div className="h-10 bg-gradient-to-r from-green-400 to-green-500 rounded-l-lg flex items-center justify-center text-white font-semibold text-sm">
+                                    Rental AHEAD
+                                  </div>
+                                </div>
+
+                                {/* Crossover point */}
+                                <div className="flex flex-col items-center px-4">
+                                  <Trophy className="w-8 h-8 text-yellow-500 mb-1" />
+                                  <div className="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-lg font-bold text-center border-2 border-yellow-600">
+                                    Year {crossoverRental}
+                                  </div>
+                                  <p className="text-xs text-gray-700 font-semibold mt-1">Crossover!</p>
+                                </div>
+
+                                {/* After crossover */}
+                                <div className="flex-1">
+                                  <div className="text-xs text-gray-600 mb-1">Years {crossoverRental + 1}-{params.yearsToAnalyze}</div>
+                                  <div className="h-10 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-r-lg flex items-center justify-center text-white font-semibold text-sm">
+                                    Own Home AHEAD
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Explanation */}
+                            <div className="bg-white p-4 rounded-lg border border-indigo-200">
+                              <p className="text-gray-700 mb-2">
+                                <strong className="text-indigo-900">Why living in your own home beats rental property:</strong>
+                              </p>
+                              <p className="text-sm text-gray-700">Rental property has costs that eat into returns: vacancy ({params.vacancyRate}%), management fees ({params.propertyManagementPercent}%), maintenance ({params.maintenanceRental}%), and turnover costs. Your primary residence avoids these costs while still benefiting from appreciation.</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {!crossoverRent && !crossoverRental && bestStrategy === 'rentToLive' && (
+                        <div className="bg-white p-4 rounded-lg border border-amber-200">
+                          <p className="text-gray-700">
+                            <strong className="text-amber-900">No Crossover!</strong> In your scenario, "Rent & Invest More" maintains the lead for all {params.yearsToAnalyze} years. This happens when rent is significantly lower than ownership costs and stock returns outpace home appreciation.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
               </div>
             )}
             
@@ -1065,6 +1684,210 @@ const FinancialAnalyzer = () => {
                     </div>
                   </div>
 
+                  {/* Visual Cash Flow Waterfall Chart */}
+                  <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-lg">
+                    <h3 className="text-xl font-bold text-gray-900 mb-4">Cash Flow Waterfall: Where Your Money Goes</h3>
+                    <p className="text-sm text-gray-600 mb-6">Visual breakdown of income to leftover cash for each strategy</p>
+
+                    <div className="space-y-8">
+                      {/* Own Your Home Waterfall */}
+                      <div>
+                        <h4 className="font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+                          <Home className="w-5 h-5" />
+                          Own Your Home
+                        </h4>
+                        <div className="space-y-2">
+                          {/* Income */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-green-700">Monthly Income (after tax)</span>
+                                <span className="font-mono font-bold text-green-700">+${formatCurrency(monthlyIncome)}</span>
+                              </div>
+                              <div className="h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg shadow flex items-center justify-center text-white font-bold" style={{width: '100%'}}>
+                                ${formatCurrency(monthlyIncome)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Housing Cost */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-red-700">Housing Cost</span>
+                                <span className="font-mono font-bold text-red-700">-${formatCurrency(buyToLiveMonthlyPayment)}</span>
+                              </div>
+                              <div className="h-6 bg-gradient-to-r from-red-500 to-red-600 rounded-lg shadow flex items-center justify-center text-white text-sm font-semibold" style={{width: `${(buyToLiveMonthlyPayment / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(buyToLiveMonthlyPayment)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Living Expenses */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-red-700">Living Expenses</span>
+                                <span className="font-mono font-bold text-red-700">-${formatCurrency(totalMonthlyLivingExpenses)}</span>
+                              </div>
+                              <div className="h-6 bg-gradient-to-r from-red-500 to-red-600 rounded-lg shadow flex items-center justify-center text-white text-sm font-semibold" style={{width: `${(totalMonthlyLivingExpenses / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(totalMonthlyLivingExpenses)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Leftover */}
+                          <div className="flex items-center gap-2 pt-2 border-t-2 border-gray-300">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-blue-700">Leftover → 💰 Invested in Stocks</span>
+                                <span className="font-mono font-bold text-blue-700">${formatCurrency(calculations.buyToLive[0].monthlyLeftover)}</span>
+                              </div>
+                              <div className={`h-8 rounded-lg shadow flex items-center justify-center text-white font-bold ${calculations.buyToLive[0].monthlyLeftover >= 0 ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-gray-400 to-gray-500'}`} style={{width: `${Math.max((calculations.buyToLive[0].monthlyLeftover / monthlyIncome) * 100, 10)}%`}}>
+                                ${formatCurrency(calculations.buyToLive[0].monthlyLeftover)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Rent & Invest More Waterfall */}
+                      <div>
+                        <h4 className="font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                          <Home className="w-5 h-5" />
+                          Rent & Invest More
+                        </h4>
+                        <div className="space-y-2">
+                          {/* Income */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-green-700">Monthly Income (after tax)</span>
+                                <span className="font-mono font-bold text-green-700">+${formatCurrency(monthlyIncome)}</span>
+                              </div>
+                              <div className="h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg shadow flex items-center justify-center text-white font-bold" style={{width: '100%'}}>
+                                ${formatCurrency(monthlyIncome)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Rent Cost */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-red-700">Rent + Insurance</span>
+                                <span className="font-mono font-bold text-red-700">-${formatCurrency(rentToLiveMonthlyPayment)}</span>
+                              </div>
+                              <div className="h-6 bg-gradient-to-r from-red-500 to-red-600 rounded-lg shadow flex items-center justify-center text-white text-sm font-semibold" style={{width: `${(rentToLiveMonthlyPayment / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(rentToLiveMonthlyPayment)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Living Expenses */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-red-700">Living Expenses</span>
+                                <span className="font-mono font-bold text-red-700">-${formatCurrency(totalMonthlyLivingExpenses)}</span>
+                              </div>
+                              <div className="h-6 bg-gradient-to-r from-red-500 to-red-600 rounded-lg shadow flex items-center justify-center text-white text-sm font-semibold" style={{width: `${(totalMonthlyLivingExpenses / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(totalMonthlyLivingExpenses)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Leftover */}
+                          <div className="flex items-center gap-2 pt-2 border-t-2 border-gray-300">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-blue-700">Leftover → 💰 Invested in Stocks</span>
+                                <span className="font-mono font-bold text-blue-700">${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}</span>
+                              </div>
+                              <div className="h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow flex items-center justify-center text-white font-bold" style={{width: `${(calculations.rentToLive[0].monthlyLeftover / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Buy Rental Property Waterfall */}
+                      <div>
+                        <h4 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                          <DollarSign className="w-5 h-5" />
+                          Buy Rental Property
+                        </h4>
+                        <div className="space-y-2">
+                          {/* Income */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-green-700">Monthly Income (after tax)</span>
+                                <span className="font-mono font-bold text-green-700">+${formatCurrency(monthlyIncome)}</span>
+                              </div>
+                              <div className="h-8 bg-gradient-to-r from-green-500 to-green-600 rounded-lg shadow flex items-center justify-center text-white font-bold" style={{width: '100%'}}>
+                                ${formatCurrency(monthlyIncome)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Rental Income */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-green-700">Rental Income (net)</span>
+                                <span className="font-mono font-bold text-green-700">+${formatCurrency(buyToRentMonthlyIncome)}</span>
+                              </div>
+                              <div className="h-6 bg-gradient-to-r from-green-400 to-green-500 rounded-lg shadow flex items-center justify-center text-white text-sm font-semibold" style={{width: `${(buyToRentMonthlyIncome / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(buyToRentMonthlyIncome)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Rental Expenses */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-red-700">Rental Expenses</span>
+                                <span className="font-mono font-bold text-red-700">-${formatCurrency(buyToRentMonthlyExpenses)}</span>
+                              </div>
+                              <div className="h-6 bg-gradient-to-r from-red-500 to-red-600 rounded-lg shadow flex items-center justify-center text-white text-sm font-semibold" style={{width: `${(buyToRentMonthlyExpenses / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(buyToRentMonthlyExpenses)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Living Expenses */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-red-700">Living Expenses</span>
+                                <span className="font-mono font-bold text-red-700">-${formatCurrency(totalMonthlyLivingExpenses)}</span>
+                              </div>
+                              <div className="h-6 bg-gradient-to-r from-red-500 to-red-600 rounded-lg shadow flex items-center justify-center text-white text-sm font-semibold" style={{width: `${(totalMonthlyLivingExpenses / monthlyIncome) * 100}%`}}>
+                                ${formatCurrency(totalMonthlyLivingExpenses)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Net Cash Flow */}
+                          <div className="flex items-center gap-2 pt-2 border-t-2 border-gray-300">
+                            <div className="w-full">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-blue-700">Net Cash Flow → 💰 Invested in Stocks</span>
+                                <span className="font-mono font-bold text-blue-700">{buyToRentNetCashFlow >= 0 ? '+' : ''}${formatCurrency(buyToRentNetCashFlow)}</span>
+                              </div>
+                              <div className={`h-8 rounded-lg shadow flex items-center justify-center text-white font-bold ${buyToRentNetCashFlow >= 0 ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-gray-400 to-gray-500'}`} style={{width: `${Math.max(Math.abs(buyToRentNetCashFlow / monthlyIncome) * 100, 10)}%`}}>
+                                ${formatCurrency(buyToRentNetCashFlow)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Buy to Live Card */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-indigo-200">
@@ -1079,7 +1902,22 @@ const FinancialAnalyzer = () => {
                             <span className="font-semibold text-green-700">+${formatCurrency(monthlyIncome)}</span>
                           </div>
                           <div className="flex justify-between text-gray-600">
-                            <span>Housing Cost:</span>
+                            <div className="flex items-center">
+                              <span>Housing Cost:</span>
+                              <MathTooltip
+                                id="buyToLive-housing"
+                                title="Housing Cost Breakdown:"
+                                lines={[
+                                  { label: 'Mortgage Payment', value: `$${formatCurrency(calculations.buyToLive[0].monthlyPayment - calculations.buyToLive[0].monthlyPMI - (params.housePrice * (params.propertyTaxRate / 100)) / 12 - params.homeInsurance - params.hoaFees - (params.housePrice * (params.maintenancePercent / 100)) / 12)}`, isNegative: true },
+                                  ...(calculations.buyToLive[0].monthlyPMI > 0 ? [{ label: 'PMI', value: `$${formatCurrency(calculations.buyToLive[0].monthlyPMI)}`, isNegative: true }] : []),
+                                  { label: 'Property Tax', value: `$${formatCurrency((params.housePrice * (params.propertyTaxRate / 100)) / 12)}`, isNegative: true },
+                                  { label: 'Home Insurance', value: `$${formatCurrency(params.homeInsurance)}`, isNegative: true },
+                                  { label: 'HOA Fees', value: `$${formatCurrency(params.hoaFees)}`, isNegative: true },
+                                  { label: 'Maintenance', value: `$${formatCurrency((params.housePrice * (params.maintenancePercent / 100)) / 12)}`, isNegative: true },
+                                  { label: 'Total Housing Cost', value: `$${formatCurrency(buyToLiveMonthlyPayment)}`, isTotal: true, isBorder: true }
+                                ]}
+                              />
+                            </div>
                             <span className="font-semibold text-red-600">-${formatCurrency(buyToLiveMonthlyPayment)}</span>
                           </div>
                           <div className="flex justify-between text-gray-600">
@@ -1094,7 +1932,20 @@ const FinancialAnalyzer = () => {
                           )}
                         </div>
                         <div className="pt-3 border-t">
-                          <p className="text-sm text-gray-600">Discretionary Income</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-gray-600">Discretionary Income</p>
+                            <MathTooltip
+                              id="buyToLive-discretionary"
+                              title="How we calculated this:"
+                              lines={[
+                                { label: 'Monthly Income (after tax)', value: `+$${formatCurrency(monthlyIncome)}`, isPositive: true },
+                                { label: 'Housing Cost', value: `-$${formatCurrency(buyToLiveMonthlyPayment)}`, isNegative: true },
+                                { label: 'Living Expenses', value: `-$${formatCurrency(totalMonthlyLivingExpenses)}`, isNegative: true },
+                                { label: 'Discretionary Income', value: `$${formatCurrency(calculations.buyToLive[0].monthlyLeftover)}`, isTotal: true, isBorder: true }
+                              ]}
+                              note="This amount is automatically invested in stocks every month."
+                            />
+                          </div>
                           <p className={`text-2xl font-bold ${calculations.buyToLive[0].monthlyLeftover >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {calculations.buyToLive[0].monthlyLeftover >= 0 ? '+' : ''}${formatCurrency(calculations.buyToLive[0].monthlyLeftover)}
                           </p>
@@ -1114,6 +1965,24 @@ const FinancialAnalyzer = () => {
                             <p className="text-xs text-red-600 mt-1">⚠️ Above 30% recommended</p>
                           )}
                         </div>
+
+                        {/* High Housing-to-Income Ratio Warning */}
+                        {buyToLivePercentOfIncome > 30 && (
+                          <div className="mt-4 bg-orange-50 border-l-4 border-orange-500 p-3 rounded">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="font-semibold text-orange-900 text-sm">High Housing Cost</p>
+                                <p className="text-xs text-orange-800 mt-1">
+                                  Housing is <strong>{buyToLivePercentOfIncome.toFixed(1)}%</strong> of income (recommended: &lt;30%).
+                                </p>
+                                <p className="text-xs text-orange-700 mt-2">
+                                  Consider: Lower home price to <strong>${formatCurrency(monthlyIncome * 12 * 0.3 / (((params.housePrice * (params.propertyTaxRate / 100)) / 12 + params.homeInsurance + params.hoaFees + (params.housePrice * (params.maintenancePercent / 100)) / 12) / buyToLiveMonthlyPayment * params.housePrice))}</strong> or increase income to <strong>${formatCurrency((buyToLiveMonthlyPayment / 0.3) * 12)}/year</strong>.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1145,7 +2014,20 @@ const FinancialAnalyzer = () => {
                           )}
                         </div>
                         <div className="pt-3 border-t">
-                          <p className="text-sm text-gray-600">Discretionary Income</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-gray-600">Discretionary Income</p>
+                            <MathTooltip
+                              id="rentToLive-discretionary"
+                              title="How we calculated this:"
+                              lines={[
+                                { label: 'Monthly Income (after tax)', value: `+$${formatCurrency(monthlyIncome)}`, isPositive: true },
+                                { label: 'Rent + Insurance', value: `-$${formatCurrency(rentToLiveMonthlyPayment)}`, isNegative: true },
+                                { label: 'Living Expenses', value: `-$${formatCurrency(totalMonthlyLivingExpenses)}`, isNegative: true },
+                                { label: 'Discretionary Income', value: `$${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}`, isTotal: true, isBorder: true }
+                              ]}
+                              note="This amount is automatically invested in stocks every month."
+                            />
+                          </div>
                           <p className={`text-2xl font-bold ${calculations.rentToLive[0].monthlyLeftover >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {calculations.rentToLive[0].monthlyLeftover >= 0 ? '+' : ''}${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}
                           </p>
@@ -1229,6 +2111,179 @@ const FinancialAnalyzer = () => {
                           : " All your options are within healthy limits!"}
                       </p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'breakdown' && (
+              <div className="space-y-6">
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-2xl border-2 border-indigo-200">
+                  <h2 className="text-2xl font-bold text-indigo-900 mb-4">Year-by-Year Detailed Breakdown</h2>
+                  <p className="text-gray-700 mb-4">Select a strategy to see detailed year-by-year financial projections</p>
+
+                  {/* Strategy Selector */}
+                  <div className="flex gap-3 mb-6 flex-wrap">
+                    <button
+                      onClick={() => setSelectedBreakdownStrategy('buyToLive')}
+                      className={`px-6 py-3 rounded-xl font-semibold transition ${
+                        selectedBreakdownStrategy === 'buyToLive'
+                          ? 'bg-indigo-600 text-white shadow-lg'
+                          : 'bg-white text-indigo-600 hover:bg-indigo-50'
+                      }`}
+                    >
+                      Own Your Home
+                    </button>
+                    <button
+                      onClick={() => setSelectedBreakdownStrategy('buyToRent')}
+                      className={`px-6 py-3 rounded-xl font-semibold transition ${
+                        selectedBreakdownStrategy === 'buyToRent'
+                          ? 'bg-green-600 text-white shadow-lg'
+                          : 'bg-white text-green-600 hover:bg-green-50'
+                      }`}
+                    >
+                      Buy Rental Property
+                    </button>
+                    <button
+                      onClick={() => setSelectedBreakdownStrategy('rentToLive')}
+                      className={`px-6 py-3 rounded-xl font-semibold transition ${
+                        selectedBreakdownStrategy === 'rentToLive'
+                          ? 'bg-amber-600 text-white shadow-lg'
+                          : 'bg-white text-amber-600 hover:bg-amber-50'
+                      }`}
+                    >
+                      Rent & Invest More
+                    </button>
+                    <button
+                      onClick={() => setSelectedBreakdownStrategy('stocksOnly')}
+                      className={`px-6 py-3 rounded-xl font-semibold transition ${
+                        selectedBreakdownStrategy === 'stocksOnly'
+                          ? 'bg-purple-600 text-white shadow-lg'
+                          : 'bg-white text-purple-600 hover:bg-purple-50'
+                      }`}
+                    >
+                      Skip Homeownership
+                    </button>
+                  </div>
+                </div>
+
+                {/* Year-by-Year Table */}
+                <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Year</th>
+                          {(selectedBreakdownStrategy === 'buyToLive' || selectedBreakdownStrategy === 'buyToRent') && (
+                            <>
+                              <th className="px-4 py-3 text-right font-semibold">Home Value</th>
+                              <th className="px-4 py-3 text-right font-semibold">Mortgage Balance</th>
+                              <th className="px-4 py-3 text-right font-semibold">Home Equity</th>
+                            </>
+                          )}
+                          <th className="px-4 py-3 text-right font-semibold">Stock Portfolio</th>
+                          <th className="px-4 py-3 text-right font-semibold">Monthly Cash Flow</th>
+                          <th className="px-4 py-3 text-right font-semibold">Total Net Worth</th>
+                          <th className="px-4 py-3 text-right font-semibold">YoY Growth</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[0, 5, 10, 15, 20, 25, 30].filter(year => year <= params.yearsToAnalyze).map((year, idx) => {
+                          const data = calculations[selectedBreakdownStrategy][year];
+                          const prevData = year > 0 ? calculations[selectedBreakdownStrategy][year - 1] : null;
+                          const yoyGrowth = prevData ? ((data.netWorth - prevData.netWorth) / prevData.netWorth) * 100 : 0;
+
+                          return (
+                            <tr key={year} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                              <td className="px-4 py-3 font-semibold text-indigo-900">{year}</td>
+                              {(selectedBreakdownStrategy === 'buyToLive' || selectedBreakdownStrategy === 'buyToRent') && (
+                                <>
+                                  <td className="px-4 py-3 text-right font-mono text-sm">${formatCurrency(data.homeValue)}</td>
+                                  <td className="px-4 py-3 text-right font-mono text-sm text-red-600">-${formatCurrency(data.remainingMortgage)}</td>
+                                  <td className="px-4 py-3 text-right font-mono text-sm text-green-600">${formatCurrency(data.homeEquity)}</td>
+                                </>
+                              )}
+                              <td className="px-4 py-3 text-right font-mono text-sm text-blue-600">${formatCurrency(data.stockValue)}</td>
+                              <td className={`px-4 py-3 text-right font-mono text-sm ${(selectedBreakdownStrategy === 'buyToLive' ? data.netMonthlyCashFlow : selectedBreakdownStrategy === 'rentToLive' ? data.monthlyCashFlow : selectedBreakdownStrategy === 'buyToRent' ? data.netMonthlyCashFlow : data.monthlyCashFlow) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {selectedBreakdownStrategy === 'buyToLive' ? (data.netMonthlyCashFlow >= 0 ? '+' : '') + '$' + formatCurrency(Math.abs(data.netMonthlyCashFlow)) :
+                                 selectedBreakdownStrategy === 'rentToLive' ? (data.monthlyCashFlow >= 0 ? '+' : '') + '$' + formatCurrency(Math.abs(data.monthlyCashFlow)) :
+                                 selectedBreakdownStrategy === 'buyToRent' ? (data.netMonthlyCashFlow >= 0 ? '+' : '') + '$' + formatCurrency(Math.abs(data.netMonthlyCashFlow)) :
+                                 (data.monthlyCashFlow >= 0 ? '+' : '') + '$' + formatCurrency(Math.abs(data.monthlyCashFlow))}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-sm font-bold">${formatCurrency(data.netWorth)}</td>
+                              <td className={`px-4 py-3 text-right font-mono text-sm font-semibold ${yoyGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {year > 0 ? (yoyGrowth >= 0 ? '+' : '') + yoyGrowth.toFixed(1) + '%' : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Summary Statistics */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-200">
+                    <h3 className="text-sm font-medium text-blue-700 mb-2">Final Net Worth</h3>
+                    <p className="text-3xl font-bold text-blue-900">
+                      ${formatCurrency(calculations[selectedBreakdownStrategy][finalYear].netWorth)}
+                    </p>
+                  </div>
+
+                  {(selectedBreakdownStrategy === 'buyToLive' || selectedBreakdownStrategy === 'buyToRent') && (
+                    <>
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border-2 border-green-200">
+                        <h3 className="text-sm font-medium text-green-700 mb-2">Total Home Equity</h3>
+                        <p className="text-3xl font-bold text-green-900">
+                          ${formatCurrency(calculations[selectedBreakdownStrategy][finalYear].homeEquity)}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {((calculations[selectedBreakdownStrategy][finalYear].homeEquity / calculations[selectedBreakdownStrategy][finalYear].netWorth) * 100).toFixed(1)}% of net worth
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-6 rounded-xl border-2 border-amber-200">
+                        <h3 className="text-sm font-medium text-amber-700 mb-2">Total Interest Paid</h3>
+                        <p className="text-3xl font-bold text-amber-900">
+                          ${formatCurrency((() => {
+                            let totalInterest = 0;
+                            for (let year = 1; year <= finalYear; year++) {
+                              const prevMortgage = calculations[selectedBreakdownStrategy][year - 1].remainingMortgage;
+                              const currentMortgage = calculations[selectedBreakdownStrategy][year].remainingMortgage;
+                              const principalPaid = prevMortgage - currentMortgage;
+                              const monthlyPayment = selectedBreakdownStrategy === 'buyToLive' ?
+                                calculations[selectedBreakdownStrategy][year].monthlyPayment :
+                                calculations[selectedBreakdownStrategy][year].monthlyExpenses;
+                              const totalPaid = monthlyPayment * 12;
+                              const interestPaid = totalPaid - principalPaid;
+                              totalInterest += Math.max(0, interestPaid);
+                            }
+                            return totalInterest;
+                          })())}
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border-2 border-purple-200">
+                    <h3 className="text-sm font-medium text-purple-700 mb-2">Stock Portfolio</h3>
+                    <p className="text-3xl font-bold text-purple-900">
+                      ${formatCurrency(calculations[selectedBreakdownStrategy][finalYear].stockValue)}
+                    </p>
+                    <p className="text-xs text-purple-600 mt-1">
+                      {((calculations[selectedBreakdownStrategy][finalYear].stockValue / calculations[selectedBreakdownStrategy][finalYear].netWorth) * 100).toFixed(1)}% of net worth
+                    </p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-xl border-2 border-indigo-200">
+                    <h3 className="text-sm font-medium text-indigo-700 mb-2">CAGR (Net Worth)</h3>
+                    <p className="text-3xl font-bold text-indigo-900">
+                      {(Math.pow(calculations[selectedBreakdownStrategy][finalYear].netWorth / calculations[selectedBreakdownStrategy][0].netWorth, 1 / finalYear) - 1) * 100 > 0 ?
+                        ((Math.pow(calculations[selectedBreakdownStrategy][finalYear].netWorth / calculations[selectedBreakdownStrategy][0].netWorth, 1 / finalYear) - 1) * 100).toFixed(2) + '%' :
+                        'N/A'}
+                    </p>
+                    <p className="text-xs text-indigo-600 mt-1">Compound Annual Growth Rate</p>
                   </div>
                 </div>
               </div>
