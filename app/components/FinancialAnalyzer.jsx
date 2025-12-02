@@ -158,7 +158,7 @@ const FinancialAnalyzer = () => {
   };
 
   const calculateIncomeTaxes = (grossIncome, filingStatus) => {
-    // 2024 Federal Tax Brackets
+    // 2024 Federal Tax Brackets (from IRS.gov)
     const brackets = {
       single: [
         { limit: 11600, rate: 0.10 },
@@ -204,25 +204,8 @@ const FinancialAnalyzer = () => {
       previousLimit = bracket.limit;
     }
 
-    // FICA Taxes
-    const socialSecurityLimit = 168600; // 2024 limit
-    const socialSecurityTax = Math.min(grossIncome, socialSecurityLimit) * 0.062;
-
-    let medicareTax = grossIncome * 0.0145;
-    // Additional Medicare tax for high earners
-    const additionalMedicareThreshold = filingStatus === 'married' ? 250000 : 200000;
-    if (grossIncome > additionalMedicareThreshold) {
-      medicareTax += (grossIncome - additionalMedicareThreshold) * 0.009;
-    }
-
-    const ficaTax = socialSecurityTax + medicareTax;
-
     return {
-      federalTax,
-      ficaTax,
-      socialSecurityTax,
-      medicareTax,
-      totalFederalAndFica: federalTax + ficaTax
+      federalTax
     };
   };
 
@@ -239,7 +222,7 @@ const FinancialAnalyzer = () => {
     // Calculate taxes and after-tax income
     const taxes = calculateIncomeTaxes(params.yearlyIncome, params.filingStatus);
     const stateTax = params.yearlyIncome * (params.stateTaxRate / 100);
-    const totalAnnualTaxes = taxes.totalFederalAndFica + stateTax;
+    const totalAnnualTaxes = taxes.federalTax + stateTax;
     const afterTaxIncome = params.yearlyIncome - totalAnnualTaxes;
     const monthlyIncome = afterTaxIncome / 12;
 
@@ -571,9 +554,6 @@ const FinancialAnalyzer = () => {
       taxes: {
         grossIncome: params.yearlyIncome,
         federalTax: taxes.federalTax,
-        socialSecurityTax: taxes.socialSecurityTax,
-        medicareTax: taxes.medicareTax,
-        ficaTax: taxes.ficaTax,
         stateTax: stateTax,
         totalTaxes: totalAnnualTaxes,
         afterTaxIncome: afterTaxIncome,
@@ -1004,58 +984,40 @@ const FinancialAnalyzer = () => {
                     Understand how each housing strategy affects your personal finances. See what percentage of your income goes to housing and how much you have left over each month.
                   </p>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Your Annual Income <InfoTooltip param="yearlyIncome" />
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl font-bold text-gray-600">$</span>
-                        <input
-                          type="number"
-                          value={params.yearlyIncome}
-                          onChange={(e) => updateParam('yearlyIncome', e.target.value)}
-                          className="text-3xl font-bold text-indigo-600 border-b-2 border-indigo-300 focus:border-indigo-600 outline-none bg-transparent w-full"
-                        />
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Income & Taxes</h4>
+                      <div className="space-y-2">
+                        <div className="bg-indigo-50 p-3 rounded-lg">
+                          <p className="text-xs text-gray-600 mb-1">Annual Gross Income</p>
+                          <p className="text-2xl font-bold text-indigo-900">${formatCurrency(params.yearlyIncome)}</p>
+                        </div>
+                        <div className="space-y-1 text-sm text-gray-600 mt-3">
+                          <div className="flex justify-between">
+                            <span>Federal Income Tax:</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(calculations.taxes.federalTax)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>State Tax ({params.stateTaxRate}%):</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(calculations.taxes.stateTax)}</span>
+                          </div>
+                          <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-red-700">
+                            <span>Total Taxes:</span>
+                            <span>-${formatCurrency(calculations.taxes.totalTaxes)}</span>
+                          </div>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-lg mt-3">
+                          <p className="text-xs text-gray-600 mb-1">After-Tax Income</p>
+                          <p className="text-2xl font-bold text-green-700">${formatCurrency(calculations.taxes.afterTaxIncome)}</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Monthly: <span className="font-semibold">${formatCurrency(monthlyIncome)}</span>
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Effective Tax Rate: <span className="font-semibold">{calculations.taxes.effectiveTaxRate.toFixed(1)}%</span>
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600 mt-2">
-                        Gross monthly: <span className="font-semibold">${formatCurrency(params.yearlyIncome / 12)}</span>
-                      </p>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-xl shadow-sm">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Annual Taxes</h4>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <div className="flex justify-between">
-                          <span>Federal Income Tax:</span>
-                          <span className="font-semibold">${formatCurrency(calculations.taxes.federalTax)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Social Security (6.2%):</span>
-                          <span className="font-semibold">${formatCurrency(calculations.taxes.socialSecurityTax)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Medicare (1.45%):</span>
-                          <span className="font-semibold">${formatCurrency(calculations.taxes.medicareTax)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>State Tax ({params.stateTaxRate}%):</span>
-                          <span className="font-semibold">${formatCurrency(calculations.taxes.stateTax)}</span>
-                        </div>
-                        <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-red-700">
-                          <span>Total Taxes:</span>
-                          <span>${formatCurrency(calculations.taxes.totalTaxes)}</span>
-                        </div>
-                        <div className="flex justify-between font-semibold text-green-700">
-                          <span>After-Tax Income:</span>
-                          <span>${formatCurrency(calculations.taxes.afterTaxIncome)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs text-gray-500 pt-1">
-                          <span>Effective Tax Rate:</span>
-                          <span>{calculations.taxes.effectiveTaxRate.toFixed(1)}%</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">Edit in Parameters tab</p>
+                      <p className="text-xs text-gray-500 mt-3">Edit in Parameters tab</p>
                     </div>
 
                     <div className="bg-white p-6 rounded-xl shadow-sm">
@@ -1678,19 +1640,19 @@ const FinancialAnalyzer = () => {
                     <p className="text-sm font-semibold text-teal-900">Tax Summary</p>
                     <div className="text-xs text-gray-700 space-y-1 mt-2">
                       <div className="flex justify-between">
-                        <span>Federal Tax:</span>
+                        <span>Federal Income Tax:</span>
                         <span className="font-semibold">${formatCurrency(calculations.taxes.federalTax)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>FICA (SS + Medicare):</span>
-                        <span className="font-semibold">${formatCurrency(calculations.taxes.ficaTax)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>State Tax:</span>
+                        <span>State Tax ({params.stateTaxRate}%):</span>
                         <span className="font-semibold">${formatCurrency(calculations.taxes.stateTax)}</span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-teal-300 font-bold">
-                        <span>Effective Rate:</span>
+                        <span>Total Annual Taxes:</span>
+                        <span>${formatCurrency(calculations.taxes.totalTaxes)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-teal-700">
+                        <span>Effective Tax Rate:</span>
                         <span>{calculations.taxes.effectiveTaxRate.toFixed(1)}%</span>
                       </div>
                     </div>
