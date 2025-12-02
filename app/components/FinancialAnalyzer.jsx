@@ -56,6 +56,8 @@ const FinancialAnalyzer = () => {
     landValuePercent: 20,
 
     yearlyIncome: 75000,
+    filingStatus: 'single', // 'single', 'married', 'headOfHousehold'
+    stateTaxRate: 5.0, // State income tax as percentage
 
     // Monthly living expenses
     monthlyGroceries: 400,
@@ -106,6 +108,8 @@ const FinancialAnalyzer = () => {
     standardDeduction: "IRS standard deduction amount. Itemized deductions (like mortgage interest) only help if they exceed this.",
     landValuePercent: "Portion of property value attributed to land (which doesn't depreciate). Building portion can be depreciated over 27.5 years for rentals.",
     yearlyIncome: "Your annual gross income before taxes. Used to calculate what percentage of your income goes to housing costs.",
+    filingStatus: "Your tax filing status (Single, Married Filing Jointly, or Head of Household). This determines your federal tax brackets.",
+    stateTaxRate: "Your state income tax rate as a percentage. Use 0 for states with no income tax (e.g., FL, TX, WA). Average is 3-6%.",
     monthlyGroceries: "Monthly spending on groceries and household supplies.",
     monthlyTransportation: "Monthly transportation costs including gas, car payments, parking, public transit.",
     monthlyInsurance: "Monthly insurance costs not covered by employer (car insurance, health insurance premiums, life insurance, etc.).",
@@ -148,9 +152,78 @@ const FinancialAnalyzer = () => {
   const calculateRemainingBalance = (principal, annualRate, totalMonths, monthsPaid) => {
     if (monthsPaid >= totalMonths) return 0;
     const monthlyRate = annualRate / 100 / 12;
-    const remaining = principal * (Math.pow(1 + monthlyRate, totalMonths) - Math.pow(1 + monthlyRate, monthsPaid)) / 
+    const remaining = principal * (Math.pow(1 + monthlyRate, totalMonths) - Math.pow(1 + monthlyRate, monthsPaid)) /
                      (Math.pow(1 + monthlyRate, totalMonths) - 1);
     return Math.max(0, remaining);
+  };
+
+  const calculateIncomeTaxes = (grossIncome, filingStatus) => {
+    // 2024 Federal Tax Brackets
+    const brackets = {
+      single: [
+        { limit: 11600, rate: 0.10 },
+        { limit: 47150, rate: 0.12 },
+        { limit: 100525, rate: 0.22 },
+        { limit: 191950, rate: 0.24 },
+        { limit: 243725, rate: 0.32 },
+        { limit: 609350, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ],
+      married: [
+        { limit: 23200, rate: 0.10 },
+        { limit: 94300, rate: 0.12 },
+        { limit: 201050, rate: 0.22 },
+        { limit: 383900, rate: 0.24 },
+        { limit: 487450, rate: 0.32 },
+        { limit: 731200, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ],
+      headOfHousehold: [
+        { limit: 16550, rate: 0.10 },
+        { limit: 63100, rate: 0.12 },
+        { limit: 100500, rate: 0.22 },
+        { limit: 191950, rate: 0.24 },
+        { limit: 243700, rate: 0.32 },
+        { limit: 609350, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ]
+    };
+
+    const selectedBrackets = brackets[filingStatus] || brackets.single;
+
+    let federalTax = 0;
+    let remainingIncome = grossIncome;
+    let previousLimit = 0;
+
+    for (const bracket of selectedBrackets) {
+      if (remainingIncome <= 0) break;
+
+      const taxableInBracket = Math.min(remainingIncome, bracket.limit - previousLimit);
+      federalTax += taxableInBracket * bracket.rate;
+      remainingIncome -= taxableInBracket;
+      previousLimit = bracket.limit;
+    }
+
+    // FICA Taxes
+    const socialSecurityLimit = 168600; // 2024 limit
+    const socialSecurityTax = Math.min(grossIncome, socialSecurityLimit) * 0.062;
+
+    let medicareTax = grossIncome * 0.0145;
+    // Additional Medicare tax for high earners
+    const additionalMedicareThreshold = filingStatus === 'married' ? 250000 : 200000;
+    if (grossIncome > additionalMedicareThreshold) {
+      medicareTax += (grossIncome - additionalMedicareThreshold) * 0.009;
+    }
+
+    const ficaTax = socialSecurityTax + medicareTax;
+
+    return {
+      federalTax,
+      ficaTax,
+      socialSecurityTax,
+      medicareTax,
+      totalFederalAndFica: federalTax + ficaTax
+    };
   };
 
   const calculations = useMemo(() => {
@@ -163,8 +236,14 @@ const FinancialAnalyzer = () => {
     const needsPMI = params.downPaymentPercent < params.pmiThreshold;
     const monthlyPMI = needsPMI ? (loanAmount * (params.pmiRate / 100)) / 12 : 0;
 
-    // Calculate monthly income and living expenses
-    const monthlyIncome = params.yearlyIncome / 12;
+    // Calculate taxes and after-tax income
+    const taxes = calculateIncomeTaxes(params.yearlyIncome, params.filingStatus);
+    const stateTax = params.yearlyIncome * (params.stateTaxRate / 100);
+    const totalAnnualTaxes = taxes.totalFederalAndFica + stateTax;
+    const afterTaxIncome = params.yearlyIncome - totalAnnualTaxes;
+    const monthlyIncome = afterTaxIncome / 12;
+
+    // Calculate living expenses
     const totalMonthlyLivingExpenses = params.monthlyGroceries + params.monthlyTransportation +
                                         params.monthlyInsurance + params.monthlyUtilities +
                                         params.monthlySubscriptions + params.monthlyOther;
@@ -487,7 +566,25 @@ const FinancialAnalyzer = () => {
       });
     }
 
-    return results;
+    return {
+      ...results,
+      taxes: {
+        grossIncome: params.yearlyIncome,
+        federalTax: taxes.federalTax,
+        socialSecurityTax: taxes.socialSecurityTax,
+        medicareTax: taxes.medicareTax,
+        ficaTax: taxes.ficaTax,
+        stateTax: stateTax,
+        totalTaxes: totalAnnualTaxes,
+        afterTaxIncome: afterTaxIncome,
+        monthlyAfterTaxIncome: monthlyIncome,
+        effectiveTaxRate: (totalAnnualTaxes / params.yearlyIncome) * 100
+      },
+      livingExpenses: {
+        monthlyTotal: totalMonthlyLivingExpenses,
+        annualTotal: totalMonthlyLivingExpenses * 12
+      }
+    };
   }, [params]);
 
   const netWorthChartData = useMemo(() => {
@@ -540,10 +637,8 @@ const FinancialAnalyzer = () => {
     (params.housePrice * (params.rentPercentage / 100) / 12) : params.monthlyRentFixed;
 
   // Personal Finance Calculations (NEW)
-  const monthlyIncome = params.yearlyIncome / 12;
-  const totalMonthlyLivingExpenses = params.monthlyGroceries + params.monthlyTransportation +
-                                      params.monthlyInsurance + params.monthlyUtilities +
-                                      params.monthlySubscriptions + params.monthlyOther;
+  const monthlyIncome = calculations.taxes.monthlyAfterTaxIncome;
+  const totalMonthlyLivingExpenses = calculations.livingExpenses.monthlyTotal;
   const buyToLiveMonthlyPayment = calculations.buyToLive[0].monthlyPayment;
   const rentToLiveMonthlyPayment = calculations.rentToLive[0].monthlyRentCost;
   const buyToRentMonthlyExpenses = calculations.buyToRent[0].monthlyExpenses;
@@ -909,7 +1004,7 @@ const FinancialAnalyzer = () => {
                     Understand how each housing strategy affects your personal finances. See what percentage of your income goes to housing and how much you have left over each month.
                   </p>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                     <div className="bg-white p-6 rounded-xl shadow-sm">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Your Annual Income <InfoTooltip param="yearlyIncome" />
@@ -924,8 +1019,43 @@ const FinancialAnalyzer = () => {
                         />
                       </div>
                       <p className="text-sm text-gray-600 mt-2">
-                        Monthly income: <span className="font-semibold">${formatCurrency(monthlyIncome)}</span>
+                        Gross monthly: <span className="font-semibold">${formatCurrency(params.yearlyIncome / 12)}</span>
                       </p>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Annual Taxes</h4>
+                      <div className="space-y-1 text-sm text-gray-600">
+                        <div className="flex justify-between">
+                          <span>Federal Income Tax:</span>
+                          <span className="font-semibold">${formatCurrency(calculations.taxes.federalTax)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Social Security (6.2%):</span>
+                          <span className="font-semibold">${formatCurrency(calculations.taxes.socialSecurityTax)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Medicare (1.45%):</span>
+                          <span className="font-semibold">${formatCurrency(calculations.taxes.medicareTax)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>State Tax ({params.stateTaxRate}%):</span>
+                          <span className="font-semibold">${formatCurrency(calculations.taxes.stateTax)}</span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-red-700">
+                          <span>Total Taxes:</span>
+                          <span>${formatCurrency(calculations.taxes.totalTaxes)}</span>
+                        </div>
+                        <div className="flex justify-between font-semibold text-green-700">
+                          <span>After-Tax Income:</span>
+                          <span>${formatCurrency(calculations.taxes.afterTaxIncome)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500 pt-1">
+                          <span>Effective Tax Rate:</span>
+                          <span>{calculations.taxes.effectiveTaxRate.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Edit in Parameters tab</p>
                     </div>
 
                     <div className="bg-white p-6 rounded-xl shadow-sm">
@@ -1491,7 +1621,82 @@ const FinancialAnalyzer = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-semibold text-lg text-orange-900 border-b-2 border-orange-200 pb-3">
+                  <h3 className="font-semibold text-lg text-teal-900 border-b-2 border-teal-200 pb-3">
+                    Income & Taxes
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Annual Income ($/year)
+                      <InfoTooltip param="yearlyIncome" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.yearlyIncome}
+                      onChange={(e) => updateParam('yearlyIncome', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      After-tax: ${formatCurrency(calculations.taxes.afterTaxIncome)}/year
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tax Filing Status
+                      <InfoTooltip param="filingStatus" />
+                    </label>
+                    <select
+                      value={params.filingStatus}
+                      onChange={(e) => setParams(prev => ({ ...prev, filingStatus: e.target.value }))}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-gray-900 font-medium"
+                    >
+                      <option value="single">Single</option>
+                      <option value="married">Married Filing Jointly</option>
+                      <option value="headOfHousehold">Head of Household</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      State Tax Rate (%)
+                      <InfoTooltip param="stateTaxRate" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.stateTaxRate}
+                      onChange={(e) => updateParam('stateTaxRate', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Use 0% for states with no income tax (FL, TX, WA, etc.)
+                    </p>
+                  </div>
+
+                  <div className="bg-teal-50 p-4 rounded-xl border border-teal-200">
+                    <p className="text-sm font-semibold text-teal-900">Tax Summary</p>
+                    <div className="text-xs text-gray-700 space-y-1 mt-2">
+                      <div className="flex justify-between">
+                        <span>Federal Tax:</span>
+                        <span className="font-semibold">${formatCurrency(calculations.taxes.federalTax)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>FICA (SS + Medicare):</span>
+                        <span className="font-semibold">${formatCurrency(calculations.taxes.ficaTax)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>State Tax:</span>
+                        <span className="font-semibold">${formatCurrency(calculations.taxes.stateTax)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-teal-300 font-bold">
+                        <span>Effective Rate:</span>
+                        <span>{calculations.taxes.effectiveTaxRate.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <h3 className="font-semibold text-lg text-orange-900 border-b-2 border-orange-200 pb-3 mt-8">
                     Monthly Living Expenses
                   </h3>
 
