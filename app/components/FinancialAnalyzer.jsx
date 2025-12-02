@@ -438,20 +438,20 @@ const FinancialAnalyzer = () => {
   const netWorthChartData = useMemo(() => {
     return calculations.buyToLive.map((item, idx) => ({
       year: item.year,
-      'Buy to Live': Math.round(item.netWorth),
-      'Buy to Rent': Math.round(calculations.buyToRent[idx].netWorth),
-      'Rent to Live': Math.round(calculations.rentToLive[idx].netWorth),
-      'Stocks Only': Math.round(calculations.stocksOnly[idx].netWorth),
+      'Own Your Home': Math.round(item.netWorth),
+      'Buy Rental Property': Math.round(calculations.buyToRent[idx].netWorth),
+      'Rent & Invest More': Math.round(calculations.rentToLive[idx].netWorth),
+      'Skip Homeownership': Math.round(calculations.stocksOnly[idx].netWorth),
     }));
   }, [calculations, params.enableRecurringContributions]);
 
   const cashFlowChartData = useMemo(() => {
     return calculations.buyToLive.slice(0, Math.min(36, params.yearsToAnalyze + 1)).map((item, idx) => ({
       year: item.year,
-      'Buy to Live': -Math.round(item.monthlyPayment),
-      'Buy to Rent': Math.round(calculations.buyToRent[idx].monthlyCashFlow),
-      'Rent to Live': -Math.round(calculations.rentToLive[idx].monthlyRentCost),
-      'Stocks Only': calculations.stocksOnly[idx].monthlyCashFlow
+      'Own Your Home': -Math.round(item.monthlyPayment),
+      'Buy Rental Property': Math.round(calculations.buyToRent[idx].monthlyCashFlow),
+      'Rent & Invest More': -Math.round(calculations.rentToLive[idx].monthlyRentCost),
+      'Skip Homeownership': calculations.stocksOnly[idx].monthlyCashFlow
     }));
   }, [calculations, params.yearsToAnalyze]);
 
@@ -472,9 +472,13 @@ const FinancialAnalyzer = () => {
   };
 
   const formatStrategyName = (name) => {
-    return name.replace(/([A-Z])/g, ' $1').trim()
-      .replace('stocks Only', 'Stocks Only')
-      .replace('rent To Live', 'Rent to Live');
+    const nameMap = {
+      'buyToLive': 'Own Your Home',
+      'buyToRent': 'Buy Rental Property',
+      'rentToLive': 'Rent & Invest More',
+      'stocksOnly': 'Skip Homeownership'
+    };
+    return nameMap[name] || name;
   };
 
   const monthlyRentCalculated = params.useRentPercentage ?
@@ -545,13 +549,94 @@ const FinancialAnalyzer = () => {
 
             {activeTab === 'overview' && (
               <div className="space-y-8">
+                {/* Introductory Guide Section */}
+                <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-purple-50 p-6 rounded-2xl border-2 border-indigo-200 shadow-lg">
+                  <h2 className="text-2xl font-bold text-indigo-900 mb-4 flex items-center gap-2">
+                    <Info className="w-6 h-6" />
+                    What Questions Does This Calculator Answer?
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">💭 Should I buy a house to live in?</p>
+                      <p>Compare <strong>Own Your Home</strong> vs <strong>Rent & Invest</strong> strategies to see which builds more wealth and cash flow.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">💰 Can I still invest in stocks if I buy?</p>
+                      <p>Yes! The <strong>Own Your Home</strong> strategy invests your leftover cash after the down payment into stocks.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">📊 What about monthly cash flow?</p>
+                      <p>Check the <strong>Personal Finance</strong> tab to see monthly costs, leftover cash, and housing % of income.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">🏠 Should I buy a cheaper house and invest more?</p>
+                      <p>Go to <strong>Parameters</strong>, lower the house price, then compare final net worth in each strategy.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">🏘️ What about buying a rental property?</p>
+                      <p>The <strong>Buy Rental Property</strong> strategy shows you buying a property to rent out while living elsewhere.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">🎯 How do I use this?</p>
+                      <p>Start with the defaults, then adjust <strong>Parameters</strong> to match your situation. Compare results below!</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Strategy Explanations */}
+                <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-lg">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">📋 What Each Strategy Means</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                    <div className="p-4 bg-indigo-50 rounded-xl border-2 border-indigo-200">
+                      <h4 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+                        <Home className="w-4 h-4" />
+                        Own Your Home + Invest
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Buy a house and live in it. Your down payment builds equity, and leftover cash goes into stocks. This is the traditional "American Dream" path.
+                      </p>
+                      <p className="text-indigo-600 font-semibold text-xs mt-2">Best for: Stability, pride of ownership</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200">
+                      <h4 className="font-bold text-green-900 mb-2 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4" />
+                        Buy Rental Property + Invest
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Buy a property to rent out. Rental income covers expenses (hopefully) and leftover cash goes into stocks. You live elsewhere.
+                      </p>
+                      <p className="text-green-600 font-semibold text-xs mt-2">Best for: Passive income seekers, landlords</p>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-xl border-2 border-amber-200">
+                      <h4 className="font-bold text-amber-900 mb-2 flex items-center gap-2">
+                        <Home className="w-4 h-4" />
+                        Rent & Invest More
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Rent a place to live and invest all your cash in stocks. No down payment needed, lower monthly costs, maximum flexibility.
+                      </p>
+                      <p className="text-amber-600 font-semibold text-xs mt-2">Best for: Flexibility, job mobility, higher risk tolerance</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-xl border-2 border-purple-200">
+                      <h4 className="font-bold text-purple-900 mb-2 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Skip Homeownership
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Don't deal with housing at all - invest everything in the stock market. Pure equity exposure with no housing costs factored in.
+                      </p>
+                      <p className="text-purple-600 font-semibold text-xs mt-2">Best for: Baseline comparison, living with family/friends</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                   {/* Buy to Live Card */}
                   <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-2xl border-2 border-indigo-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <Home className="w-7 h-7 text-indigo-600" />
-                      <h3 className="font-semibold text-lg text-indigo-900">Buy to Live</h3>
+                      <h3 className="font-semibold text-lg text-indigo-900">Own Your Home</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -585,7 +670,7 @@ const FinancialAnalyzer = () => {
                   <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-6 rounded-2xl border-2 border-green-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <DollarSign className="w-7 h-7 text-green-600" />
-                      <h3 className="font-semibold text-lg text-green-900">Buy to Rent</h3>
+                      <h3 className="font-semibold text-lg text-green-900">Buy Rental Property</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -619,7 +704,7 @@ const FinancialAnalyzer = () => {
                   <div className="bg-gradient-to-br from-amber-50 to-orange-100 p-6 rounded-2xl border-2 border-amber-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <Home className="w-7 h-7 text-amber-600" />
-                      <h3 className="font-semibold text-lg text-amber-900">Rent to Live</h3>
+                      <h3 className="font-semibold text-lg text-amber-900">Rent & Invest More</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -658,7 +743,7 @@ const FinancialAnalyzer = () => {
                   <div className="bg-gradient-to-br from-purple-50 to-violet-100 p-6 rounded-2xl border-2 border-purple-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <TrendingUp className="w-7 h-7 text-purple-600" />
-                      <h3 className="font-semibold text-lg text-purple-900">Stocks Only</h3>
+                      <h3 className="font-semibold text-lg text-purple-900">Skip Homeownership</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -728,10 +813,10 @@ const FinancialAnalyzer = () => {
                       <YAxis label={{ value: 'Net Worth ($)', angle: -90, position: 'insideLeft' }} />
                       <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
                       <Legend />
-                      <Area type="monotone" dataKey="Buy to Live" stroke="#4F46E5" fillOpacity={1} fill="url(#colorLive)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="Buy to Rent" stroke="#10B981" fillOpacity={1} fill="url(#colorRent)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="Rent to Live" stroke="#f59e0b" fillOpacity={1} fill="url(#colorRentToLive)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorStocks)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Own Your Home" stroke="#4F46E5" fillOpacity={1} fill="url(#colorLive)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Buy Rental Property" stroke="#10B981" fillOpacity={1} fill="url(#colorRent)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Rent & Invest More" stroke="#f59e0b" fillOpacity={1} fill="url(#colorRentToLive)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Skip Homeownership" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorStocks)" strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -745,10 +830,10 @@ const FinancialAnalyzer = () => {
                       <YAxis label={{ value: 'Monthly Cash Flow ($)', angle: -90, position: 'insideLeft' }} />
                       <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
                       <Legend />
-                      <Bar dataKey="Buy to Live" fill="#4F46E5" />
-                      <Bar dataKey="Buy to Rent" fill="#10B981" />
-                      <Bar dataKey="Rent to Live" fill="#f59e0b" />
-                      <Bar dataKey="Stocks Only" fill="#8B5CF6" />
+                      <Bar dataKey="Own Your Home" fill="#4F46E5" />
+                      <Bar dataKey="Buy Rental Property" fill="#10B981" />
+                      <Bar dataKey="Rent & Invest More" fill="#f59e0b" />
+                      <Bar dataKey="Skip Homeownership" fill="#8B5CF6" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -789,7 +874,7 @@ const FinancialAnalyzer = () => {
                     <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-indigo-200">
                       <h4 className="font-semibold text-indigo-900 mb-4 text-lg flex items-center gap-2">
                         <Home className="w-5 h-5" />
-                        Buy to Live
+                        Own Your Home
                       </h4>
                       <div className="space-y-3">
                         <div>
@@ -823,7 +908,7 @@ const FinancialAnalyzer = () => {
                     <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-green-200">
                       <h4 className="font-semibold text-green-900 mb-4 text-lg flex items-center gap-2">
                         <Home className="w-5 h-5" />
-                        Rent to Live
+                        Rent & Invest More
                       </h4>
                       <div className="space-y-3">
                         <div>
@@ -857,7 +942,7 @@ const FinancialAnalyzer = () => {
                     <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-blue-200">
                       <h4 className="font-semibold text-blue-900 mb-4 text-lg flex items-center gap-2">
                         <DollarSign className="w-5 h-5" />
-                        Buy to Rent Out
+                        Buy Rental Property
                       </h4>
                       <div className="space-y-3">
                         <div>
@@ -892,19 +977,19 @@ const FinancialAnalyzer = () => {
                       <p>
                         <strong>Most Cash Available:</strong>{' '}
                         {Math.max(buyToLiveLeftoverMonthly, rentToLiveLeftoverMonthly, buyToRentLeftoverMonthly) === buyToLiveLeftoverMonthly
-                          ? 'Buy to Live'
+                          ? 'Own Your Home'
                           : Math.max(rentToLiveLeftoverMonthly, buyToRentLeftoverMonthly) === rentToLiveLeftoverMonthly
-                          ? 'Rent to Live'
-                          : 'Buy to Rent'}{' '}
+                          ? 'Rent & Invest More'
+                          : 'Buy Rental Property'}{' '}
                         leaves you with the most monthly cash flow.
                       </p>
                       <p>
                         <strong>Lowest Housing Cost %:</strong>{' '}
                         {Math.min(buyToLivePercentOfIncome, rentToLivePercentOfIncome, buyToRentPercentOfIncome) === buyToLivePercentOfIncome
-                          ? 'Buy to Live'
+                          ? 'Own Your Home'
                           : Math.min(rentToLivePercentOfIncome, buyToRentPercentOfIncome) === rentToLivePercentOfIncome
-                          ? 'Rent to Live'
-                          : 'Buy to Rent'}{' '}
+                          ? 'Rent & Invest More'
+                          : 'Buy Rental Property'}{' '}
                         has the lowest cost as a percentage of your income.
                       </p>
                       <p className="pt-2 border-t border-indigo-200">
@@ -1446,10 +1531,10 @@ const FinancialAnalyzer = () => {
                         <YAxis tickFormatter={(value) => `$${formatCurrency(value)}`} />
                         <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
                         <Legend />
-                        <Line type="monotone" dataKey="Buy to Live" stroke="#4F46E5" strokeWidth={2} />
-                        <Line type="monotone" dataKey="Buy to Rent" stroke="#10B981" strokeWidth={2} />
-                        <Line type="monotone" dataKey="Rent to Live" stroke="#f59e0b" strokeWidth={2} />
-                        <Line type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Own Your Home" stroke="#4F46E5" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Buy Rental Property" stroke="#10B981" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Rent & Invest More" stroke="#f59e0b" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Skip Homeownership" stroke="#8B5CF6" strokeWidth={2} />
                         </LineChart>
                     </ResponsiveContainer>
                     </div>
