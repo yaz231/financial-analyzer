@@ -56,6 +56,16 @@ const FinancialAnalyzer = () => {
     landValuePercent: 20,
 
     yearlyIncome: 75000,
+    filingStatus: 'single', // 'single', 'married', 'headOfHousehold'
+    stateTaxRate: 5.0, // State income tax as percentage
+
+    // Monthly living expenses
+    monthlyGroceries: 400,
+    monthlyTransportation: 200,
+    monthlyInsurance: 150, // car, health premiums not covered by employer
+    monthlyUtilities: 150,
+    monthlySubscriptions: 50, // gym, streaming, etc.
+    monthlyOther: 200, // dining out, entertainment, misc
 
     monthlyRentToLive: 1800,
     renterInsurance: 25,
@@ -98,6 +108,14 @@ const FinancialAnalyzer = () => {
     standardDeduction: "IRS standard deduction amount. Itemized deductions (like mortgage interest) only help if they exceed this.",
     landValuePercent: "Portion of property value attributed to land (which doesn't depreciate). Building portion can be depreciated over 27.5 years for rentals.",
     yearlyIncome: "Your annual gross income before taxes. Used to calculate what percentage of your income goes to housing costs.",
+    filingStatus: "Your tax filing status (Single, Married Filing Jointly, or Head of Household). This determines your federal tax brackets.",
+    stateTaxRate: "Your state income tax rate as a percentage. Use 0 for states with no income tax (e.g., FL, TX, WA). Average is 3-6%.",
+    monthlyGroceries: "Monthly spending on groceries and household supplies.",
+    monthlyTransportation: "Monthly transportation costs including gas, car payments, parking, public transit.",
+    monthlyInsurance: "Monthly insurance costs not covered by employer (car insurance, health insurance premiums, life insurance, etc.).",
+    monthlyUtilities: "Monthly utility costs like electricity, water, internet, phone bills.",
+    monthlySubscriptions: "Monthly subscriptions including gym membership, streaming services, software subscriptions, etc.",
+    monthlyOther: "Other monthly expenses like dining out, entertainment, shopping, personal care, etc.",
     monthlyRentToLive: "Monthly rent you'd pay to live in a comparable property instead of buying.",
     renterInsurance: "Monthly cost for renter's insurance (typically much cheaper than homeowner's insurance).",
     rentToLiveGrowth: "Expected annual increase in rent. Often tracks with inflation (2-4%).",
@@ -134,9 +152,61 @@ const FinancialAnalyzer = () => {
   const calculateRemainingBalance = (principal, annualRate, totalMonths, monthsPaid) => {
     if (monthsPaid >= totalMonths) return 0;
     const monthlyRate = annualRate / 100 / 12;
-    const remaining = principal * (Math.pow(1 + monthlyRate, totalMonths) - Math.pow(1 + monthlyRate, monthsPaid)) / 
+    const remaining = principal * (Math.pow(1 + monthlyRate, totalMonths) - Math.pow(1 + monthlyRate, monthsPaid)) /
                      (Math.pow(1 + monthlyRate, totalMonths) - 1);
     return Math.max(0, remaining);
+  };
+
+  const calculateIncomeTaxes = (grossIncome, filingStatus) => {
+    // 2024 Federal Tax Brackets (from IRS.gov)
+    const brackets = {
+      single: [
+        { limit: 11600, rate: 0.10 },
+        { limit: 47150, rate: 0.12 },
+        { limit: 100525, rate: 0.22 },
+        { limit: 191950, rate: 0.24 },
+        { limit: 243725, rate: 0.32 },
+        { limit: 609350, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ],
+      married: [
+        { limit: 23200, rate: 0.10 },
+        { limit: 94300, rate: 0.12 },
+        { limit: 201050, rate: 0.22 },
+        { limit: 383900, rate: 0.24 },
+        { limit: 487450, rate: 0.32 },
+        { limit: 731200, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ],
+      headOfHousehold: [
+        { limit: 16550, rate: 0.10 },
+        { limit: 63100, rate: 0.12 },
+        { limit: 100500, rate: 0.22 },
+        { limit: 191950, rate: 0.24 },
+        { limit: 243700, rate: 0.32 },
+        { limit: 609350, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ]
+    };
+
+    const selectedBrackets = brackets[filingStatus] || brackets.single;
+
+    let federalTax = 0;
+    let remainingIncome = grossIncome;
+    let previousLimit = 0;
+
+    for (const bracket of selectedBrackets) {
+      if (remainingIncome <= 0) break;
+
+      const taxableInBracket = Math.min(remainingIncome, bracket.limit - previousLimit);
+      federalTax += taxableInBracket * bracket.rate;
+      remainingIncome -= taxableInBracket;
+      previousLimit = bracket.limit;
+    }
+
+    return {
+      federalTax
+    };
   };
 
   const calculations = useMemo(() => {
@@ -145,9 +215,21 @@ const FinancialAnalyzer = () => {
     const monthlyMortgage = calculateMortgagePayment(loanAmount, params.mortgageRate, params.loanTermYears);
     const monthlyPropertyTax = (params.housePrice * (params.propertyTaxRate / 100)) / 12;
     const monthlyMaintenance = (params.housePrice * (params.maintenancePercent / 100)) / 12;
-    
+
     const needsPMI = params.downPaymentPercent < params.pmiThreshold;
     const monthlyPMI = needsPMI ? (loanAmount * (params.pmiRate / 100)) / 12 : 0;
+
+    // Calculate taxes and after-tax income
+    const taxes = calculateIncomeTaxes(params.yearlyIncome, params.filingStatus);
+    const stateTax = params.yearlyIncome * (params.stateTaxRate / 100);
+    const totalAnnualTaxes = taxes.federalTax + stateTax;
+    const afterTaxIncome = params.yearlyIncome - totalAnnualTaxes;
+    const monthlyIncome = afterTaxIncome / 12;
+
+    // Calculate living expenses
+    const totalMonthlyLivingExpenses = params.monthlyGroceries + params.monthlyTransportation +
+                                        params.monthlyInsurance + params.monthlyUtilities +
+                                        params.monthlySubscriptions + params.monthlyOther;
 
     const results = {
       buyToLive: [],
@@ -203,12 +285,54 @@ const FinancialAnalyzer = () => {
 
       // BUY TO LIVE
       const homeEquityLive = homeValue - remainingMortgage;
-      const monthlyHousingCost = monthlyMortgage + currentPMI + monthlyPropertyTax + 
+      const monthlyHousingCost = monthlyMortgage + currentPMI + monthlyPropertyTax +
                                 params.homeInsurance + params.hoaFees + monthlyMaintenance;
 
+      // Calculate leftover income that can be invested monthly
+      const monthlyLeftoverLive = monthlyIncome - monthlyHousingCost - totalMonthlyLivingExpenses;
+
+      // Initial stock investment from down payment
       const initialStockInvestmentLive = params.initialCash - downPayment;
-      const stockValueLive = initialStockInvestmentLive * Math.pow(1 + params.stockReturn / 100, year);
-      const netWorthLive = homeEquityLive + stockValueLive + cumulativeTaxBenefitsLive;
+      let stockValueLive = initialStockInvestmentLive * Math.pow(1 + params.stockReturn / 100, year);
+
+      // Add monthly contributions from leftover income
+      let monthlyContributionsLive = 0;
+      let dividendsLive = 0;
+      let annualDividendIncomeLive = 0;
+
+      if (year > 0 && monthlyLeftoverLive > 0) {
+        const annualContribution = monthlyLeftoverLive * 12;
+        for (let y = 1; y <= year; y++) {
+          const yearsToGrow = year - y;
+          monthlyContributionsLive += annualContribution * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+        }
+      }
+
+      // Calculate dividends from the entire portfolio (initial + contributions)
+      if (params.dividendYield > 0 && year > 0) {
+        for (let y = 1; y <= year; y++) {
+          const contributionsSoFar = monthlyLeftoverLive > 0 ? monthlyLeftoverLive * 12 * y : 0;
+          const baseValueAtYear = initialStockInvestmentLive * Math.pow(1 + params.stockReturn / 100, y);
+          const contributionsToYear = contributionsSoFar * Math.pow(1 + params.stockReturn / 100, y - Math.floor(y/2));
+          const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
+
+          const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
+          const yearsToGrow = year - y;
+
+          if (params.dividendsReinvested) {
+            dividendsLive += dividendAtYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+          } else {
+            dividendsLive += dividendAtYear;
+          }
+
+          if (y === year) {
+            annualDividendIncomeLive = dividendAtYear;
+          }
+        }
+      }
+
+      const totalStockValueLive = stockValueLive + monthlyContributionsLive + dividendsLive;
+      const netWorthLive = homeEquityLive + totalStockValueLive + cumulativeTaxBenefitsLive;
 
 
       // BUY TO RENT
@@ -306,81 +430,65 @@ const FinancialAnalyzer = () => {
       }
 
       const netWorthStocks = stockValueOnly + contributionsAccumulated + dividendsAccumulated;
-      const monthlyCashFlowStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 
-      (params.enableRecurringContributions ? -params.contributionAmount : 0);
+      // Calculate net monthly cash flow for Stocks Only
+      // Cash Flow = Income + Dividends - Living Expenses - Recurring Contributions
+      const monthlyDividendIncomeStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 0;
+      const monthlyRecurringContribution = params.enableRecurringContributions ? params.contributionAmount : 0;
+      const monthlyCashFlowStocks = monthlyIncome + monthlyDividendIncomeStocks - totalMonthlyLivingExpenses - monthlyRecurringContribution;
 
       // RENT TO LIVE (NEW SCENARIO)
       const currentRentToLive = params.monthlyRentToLive * Math.pow(1 + params.rentToLiveGrowth / 100, year);
       const monthlyRentCost = currentRentToLive + params.renterInsurance;
 
+      // Calculate leftover income that can be invested monthly
+      const monthlyLeftoverRent = monthlyIncome - monthlyRentCost - totalMonthlyLivingExpenses;
+
       // All initial cash goes into stocks
       let stocksFromRentingBase = params.initialCash * Math.pow(1 + params.stockReturn / 100, year);
 
-      // Calculate dividends for Rent to Live portfolio
+      // Add monthly contributions from leftover income
+      let monthlyContributionsRent = 0;
+      if (year > 0 && monthlyLeftoverRent > 0) {
+        const annualContribution = monthlyLeftoverRent * 12;
+        for (let y = 1; y <= year; y++) {
+          const yearsToGrow = year - y;
+          monthlyContributionsRent += annualContribution * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+        }
+      }
+
+      // Calculate dividends for Rent to Live portfolio (from initial + contributions)
       let rentToLiveDividendsAccumulated = 0;
       let rentToLiveAnnualDividendIncome = 0;
 
       if (params.dividendYield > 0 && year > 0) {
         for (let y = 1; y <= year; y++) {
-          // Portfolio value grows each year
-          const portfolioValueAtYear = params.initialCash * Math.pow(1 + params.stockReturn / 100, y);
+          const contributionsSoFar = monthlyLeftoverRent > 0 ? monthlyLeftoverRent * 12 * y : 0;
+          const baseValueAtYear = params.initialCash * Math.pow(1 + params.stockReturn / 100, y);
+          const contributionsToYear = contributionsSoFar * Math.pow(1 + params.stockReturn / 100, y - Math.floor(y/2));
+          const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
+
           const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
           const yearsToGrow = year - y;
-          
+
           if (params.dividendsReinvested) {
-            // Reinvest dividends - they compound
             rentToLiveDividendsAccumulated += dividendAtYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
           } else {
-            // Don't reinvest - just accumulate cash
             rentToLiveDividendsAccumulated += dividendAtYear;
           }
-          
+
           if (y === year) {
             rentToLiveAnnualDividendIncome = dividendAtYear;
           }
         }
       }
 
-      // Calculate the net worth for Rent to Live
-      let stocksFromRenting = stocksFromRentingBase;
+      // Calculate total stock value for Rent to Live
+      const stocksFromRenting = stocksFromRentingBase + monthlyContributionsRent + rentToLiveDividendsAccumulated;
 
-      if (params.dividendsReinvested) {
-        // If reinvested, add to stock value
-        stocksFromRenting += rentToLiveDividendsAccumulated;
-      } else {
-        // If not reinvested, dividends are separate cash
-        stocksFromRenting += rentToLiveDividendsAccumulated;
-      }
-
-      // Add savings each year (difference between owning and renting)
-      if (year > 0) {
-        for (let y = 1; y <= year; y++) {
-          const rentAtYear = params.monthlyRentToLive * Math.pow(1 + params.rentToLiveGrowth / 100, y);
-          const rentCostAtYear = rentAtYear + params.renterInsurance;
-          
-          const homeValueAtYear = params.housePrice * Math.pow(1 + params.homeAppreciation / 100, y);
-          const propertyTaxAtYear = (homeValueAtYear * (params.propertyTaxRate / 100)) / 12;
-          const maintenanceAtYear = (homeValueAtYear * (params.maintenancePercent / 100)) / 12;
-          const remainingAtYear = calculateRemainingBalance(loanAmount, params.mortgageRate, params.loanTermYears * 12, y * 12);
-          const equityPercentAtYear = ((homeValueAtYear - remainingAtYear) / homeValueAtYear) * 100;
-          const pmiAtYear = (needsPMI && equityPercentAtYear < params.pmiThreshold) ? monthlyPMI : 0;
-          
-          const owningCostAtYear = monthlyMortgage + pmiAtYear + propertyTaxAtYear + 
-                                  params.homeInsurance + params.hoaFees + maintenanceAtYear;
-          
-          const monthlySavings = owningCostAtYear - rentCostAtYear;
-          const yearsGrowth = year - y;
-          
-          if (monthlySavings > 0) {
-            stocksFromRenting += (monthlySavings * 12) * Math.pow(1 + params.stockReturn / 100, yearsGrowth);
-          }
-        }
-      }
-
-      // Calculate net monthly cash flow
-      // If dividends are not reinvested, they offset the rent cost
-      const monthlyDividendIncome = !params.dividendsReinvested ? (rentToLiveAnnualDividendIncome / 12) : 0;
-      const netMonthlyCashFlow = -monthlyRentCost + monthlyDividendIncome;
+      // Calculate net monthly cash flow for Rent & Invest More
+      // Cash Flow = Income + Dividends - Rent - Living Expenses
+      const monthlyDividendIncomeRent = !params.dividendsReinvested ? (rentToLiveAnnualDividendIncome / 12) : 0;
+      const netMonthlyCashFlowRent = monthlyIncome + monthlyDividendIncomeRent - monthlyRentCost - totalMonthlyLivingExpenses;
   
       results.stocksOnly.push({
         year,
@@ -391,18 +499,33 @@ const FinancialAnalyzer = () => {
         monthlyCashFlow: monthlyCashFlowStocks
       });
         
+      // Net monthly cash flow for Buy to Live
+      // Cash Flow = Income + Dividends - Housing - Living Expenses
+      const monthlyDividendOffsetLive = !params.dividendsReinvested ? (annualDividendIncomeLive / 12) : 0;
+      const netMonthlyCashFlowLive = monthlyIncome + monthlyDividendOffsetLive - monthlyHousingCost - totalMonthlyLivingExpenses;
+
       results.buyToLive.push({
         year,
         netWorth: netWorthLive,
         homeEquity: homeEquityLive,
-        stockValue: stockValueLive,
+        stockValue: totalStockValueLive,
+        stockValueBase: stockValueLive,
+        monthlyContributions: monthlyContributionsLive,
+        dividends: dividendsLive,
         homeValue,
         remainingMortgage,
         monthlyPayment: monthlyHousingCost,
         monthlyPMI: currentPMI,
         taxBenefit: taxBenefitLive,
-        netMonthlyCashFlow: -Math.round(monthlyHousingCost)
+        monthlyLeftover: monthlyLeftoverLive,
+        monthlyDividendIncome: annualDividendIncomeLive / 12,
+        netMonthlyCashFlow: netMonthlyCashFlowLive
       });
+
+      // Calculate net monthly cash flow for Buy Rental Property
+      // Cash Flow = Income + Rental Net Income - Living Expenses
+      // Note: Personal housing cost not included (assumed living with family or included in living expenses)
+      const netMonthlyCashFlowBuyToRent = monthlyIncome + monthlyCashFlow - totalMonthlyLivingExpenses;
 
       results.buyToRent.push({
         year,
@@ -417,41 +540,59 @@ const FinancialAnalyzer = () => {
         monthlyCashFlow,
         turnoverCosts,
         taxBenefit: taxBenefitRent,
-        netMonthlyCashFlow: Math.round(monthlyCashFlow)
+        netMonthlyCashFlow: Math.round(netMonthlyCashFlowBuyToRent)
       });
 
       results.rentToLive.push({
         year,
         netWorth: stocksFromRenting,
         stockValue: stocksFromRenting,
+        stockValueBase: stocksFromRentingBase,
+        monthlyContributions: monthlyContributionsRent,
+        dividends: rentToLiveDividendsAccumulated,
         monthlyRent: currentRentToLive,
         monthlyRentCost: monthlyRentCost,
-        monthlyCashFlow: netMonthlyCashFlow,
-        monthlyDividendIncome: monthlyDividendIncome,
-        dividendsAccumulated: rentToLiveDividendsAccumulated
+        monthlyLeftover: monthlyLeftoverRent,
+        monthlyDividendIncome: monthlyDividendIncomeRent,
+        monthlyCashFlow: netMonthlyCashFlowRent
       });
     }
 
-    return results;
+    return {
+      ...results,
+      taxes: {
+        grossIncome: params.yearlyIncome,
+        federalTax: taxes.federalTax,
+        stateTax: stateTax,
+        totalTaxes: totalAnnualTaxes,
+        afterTaxIncome: afterTaxIncome,
+        monthlyAfterTaxIncome: monthlyIncome,
+        effectiveTaxRate: (totalAnnualTaxes / params.yearlyIncome) * 100
+      },
+      livingExpenses: {
+        monthlyTotal: totalMonthlyLivingExpenses,
+        annualTotal: totalMonthlyLivingExpenses * 12
+      }
+    };
   }, [params]);
 
   const netWorthChartData = useMemo(() => {
     return calculations.buyToLive.map((item, idx) => ({
       year: item.year,
-      'Buy to Live': Math.round(item.netWorth),
-      'Buy to Rent': Math.round(calculations.buyToRent[idx].netWorth),
-      'Rent to Live': Math.round(calculations.rentToLive[idx].netWorth),
-      'Stocks Only': Math.round(calculations.stocksOnly[idx].netWorth),
+      'Own Your Home': Math.round(item.netWorth),
+      'Buy Rental Property': Math.round(calculations.buyToRent[idx].netWorth),
+      'Rent & Invest More': Math.round(calculations.rentToLive[idx].netWorth),
+      'Skip Homeownership': Math.round(calculations.stocksOnly[idx].netWorth),
     }));
   }, [calculations, params.enableRecurringContributions]);
 
   const cashFlowChartData = useMemo(() => {
     return calculations.buyToLive.slice(0, Math.min(36, params.yearsToAnalyze + 1)).map((item, idx) => ({
       year: item.year,
-      'Buy to Live': -Math.round(item.monthlyPayment),
-      'Buy to Rent': Math.round(calculations.buyToRent[idx].monthlyCashFlow),
-      'Rent to Live': -Math.round(calculations.rentToLive[idx].monthlyRentCost),
-      'Stocks Only': calculations.stocksOnly[idx].monthlyCashFlow
+      'Own Your Home': Math.round(item.netMonthlyCashFlow),
+      'Buy Rental Property': Math.round(calculations.buyToRent[idx].netMonthlyCashFlow),
+      'Rent & Invest More': Math.round(calculations.rentToLive[idx].monthlyCashFlow),
+      'Skip Homeownership': Math.round(calculations.stocksOnly[idx].monthlyCashFlow)
     }));
   }, [calculations, params.yearsToAnalyze]);
 
@@ -472,16 +613,21 @@ const FinancialAnalyzer = () => {
   };
 
   const formatStrategyName = (name) => {
-    return name.replace(/([A-Z])/g, ' $1').trim()
-      .replace('stocks Only', 'Stocks Only')
-      .replace('rent To Live', 'Rent to Live');
+    const nameMap = {
+      'buyToLive': 'Own Your Home',
+      'buyToRent': 'Buy Rental Property',
+      'rentToLive': 'Rent & Invest More',
+      'stocksOnly': 'Skip Homeownership'
+    };
+    return nameMap[name] || name;
   };
 
   const monthlyRentCalculated = params.useRentPercentage ?
     (params.housePrice * (params.rentPercentage / 100) / 12) : params.monthlyRentFixed;
 
   // Personal Finance Calculations (NEW)
-  const monthlyIncome = params.yearlyIncome / 12;
+  const monthlyIncome = calculations.taxes.monthlyAfterTaxIncome;
+  const totalMonthlyLivingExpenses = calculations.livingExpenses.monthlyTotal;
   const buyToLiveMonthlyPayment = calculations.buyToLive[0].monthlyPayment;
   const rentToLiveMonthlyPayment = calculations.rentToLive[0].monthlyRentCost;
   const buyToRentMonthlyExpenses = calculations.buyToRent[0].monthlyExpenses;
@@ -545,13 +691,94 @@ const FinancialAnalyzer = () => {
 
             {activeTab === 'overview' && (
               <div className="space-y-8">
+                {/* Introductory Guide Section */}
+                <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-purple-50 p-6 rounded-2xl border-2 border-indigo-200 shadow-lg">
+                  <h2 className="text-2xl font-bold text-indigo-900 mb-4 flex items-center gap-2">
+                    <Info className="w-6 h-6" />
+                    What Questions Does This Calculator Answer?
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">💭 Should I buy a house to live in?</p>
+                      <p>Compare <strong>Own Your Home</strong> vs <strong>Rent & Invest</strong> strategies to see which builds more wealth and cash flow.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">💰 Can I still invest in stocks if I buy?</p>
+                      <p>Yes! The <strong>Own Your Home</strong> strategy invests your leftover cash after the down payment into stocks.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">📊 What about monthly cash flow?</p>
+                      <p>Check the <strong>Personal Finance</strong> tab to see monthly costs, leftover cash, and housing % of income.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">🏠 Should I buy a cheaper house and invest more?</p>
+                      <p>Go to <strong>Parameters</strong>, lower the house price, then compare final net worth in each strategy.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">🏘️ What about buying a rental property?</p>
+                      <p>The <strong>Buy Rental Property</strong> strategy shows you buying a property to rent out while living elsewhere.</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-indigo-200">
+                      <p className="font-semibold text-indigo-900 mb-2">🎯 How do I use this?</p>
+                      <p>Start with the defaults, then adjust <strong>Parameters</strong> to match your situation. Compare results below!</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Strategy Explanations */}
+                <div className="bg-white p-6 rounded-2xl border-2 border-gray-200 shadow-lg">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">📋 What Each Strategy Means</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                    <div className="p-4 bg-indigo-50 rounded-xl border-2 border-indigo-200">
+                      <h4 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+                        <Home className="w-4 h-4" />
+                        Own Your Home + Invest
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Buy a house and live in it. Your down payment builds equity, and leftover cash goes into stocks. This is the traditional "American Dream" path.
+                      </p>
+                      <p className="text-indigo-600 font-semibold text-xs mt-2">Best for: Stability, pride of ownership</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200">
+                      <h4 className="font-bold text-green-900 mb-2 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4" />
+                        Buy Rental Property + Invest
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Buy a property to rent out. Rental income covers expenses (hopefully) and leftover cash goes into stocks. You live elsewhere.
+                      </p>
+                      <p className="text-green-600 font-semibold text-xs mt-2">Best for: Passive income seekers, landlords</p>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-xl border-2 border-amber-200">
+                      <h4 className="font-bold text-amber-900 mb-2 flex items-center gap-2">
+                        <Home className="w-4 h-4" />
+                        Rent & Invest More
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Rent a place to live and invest all your cash in stocks. No down payment needed, lower monthly costs, maximum flexibility.
+                      </p>
+                      <p className="text-amber-600 font-semibold text-xs mt-2">Best for: Flexibility, job mobility, higher risk tolerance</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-xl border-2 border-purple-200">
+                      <h4 className="font-bold text-purple-900 mb-2 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Skip Homeownership
+                      </h4>
+                      <p className="text-gray-700 text-xs leading-relaxed">
+                        Don't deal with housing at all - invest everything in the stock market. Pure equity exposure with no housing costs factored in.
+                      </p>
+                      <p className="text-purple-600 font-semibold text-xs mt-2">Best for: Baseline comparison, living with family/friends</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                   {/* Buy to Live Card */}
                   <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-2xl border-2 border-indigo-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <Home className="w-7 h-7 text-indigo-600" />
-                      <h3 className="font-semibold text-lg text-indigo-900">Buy to Live</h3>
+                      <h3 className="font-semibold text-lg text-indigo-900">Own Your Home</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -585,7 +812,7 @@ const FinancialAnalyzer = () => {
                   <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-6 rounded-2xl border-2 border-green-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <DollarSign className="w-7 h-7 text-green-600" />
-                      <h3 className="font-semibold text-lg text-green-900">Buy to Rent</h3>
+                      <h3 className="font-semibold text-lg text-green-900">Buy Rental Property</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -619,7 +846,7 @@ const FinancialAnalyzer = () => {
                   <div className="bg-gradient-to-br from-amber-50 to-orange-100 p-6 rounded-2xl border-2 border-amber-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <Home className="w-7 h-7 text-amber-600" />
-                      <h3 className="font-semibold text-lg text-amber-900">Rent to Live</h3>
+                      <h3 className="font-semibold text-lg text-amber-900">Rent & Invest More</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -658,7 +885,7 @@ const FinancialAnalyzer = () => {
                   <div className="bg-gradient-to-br from-purple-50 to-violet-100 p-6 rounded-2xl border-2 border-purple-200 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <TrendingUp className="w-7 h-7 text-purple-600" />
-                      <h3 className="font-semibold text-lg text-purple-900">Stocks Only</h3>
+                      <h3 className="font-semibold text-lg text-purple-900">Skip Homeownership</h3>
                     </div>
                     <div className="space-y-2">
                       <div>
@@ -728,10 +955,10 @@ const FinancialAnalyzer = () => {
                       <YAxis label={{ value: 'Net Worth ($)', angle: -90, position: 'insideLeft' }} />
                       <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
                       <Legend />
-                      <Area type="monotone" dataKey="Buy to Live" stroke="#4F46E5" fillOpacity={1} fill="url(#colorLive)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="Buy to Rent" stroke="#10B981" fillOpacity={1} fill="url(#colorRent)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="Rent to Live" stroke="#f59e0b" fillOpacity={1} fill="url(#colorRentToLive)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorStocks)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Own Your Home" stroke="#4F46E5" fillOpacity={1} fill="url(#colorLive)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Buy Rental Property" stroke="#10B981" fillOpacity={1} fill="url(#colorRent)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Rent & Invest More" stroke="#f59e0b" fillOpacity={1} fill="url(#colorRentToLive)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Skip Homeownership" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorStocks)" strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -745,10 +972,10 @@ const FinancialAnalyzer = () => {
                       <YAxis label={{ value: 'Monthly Cash Flow ($)', angle: -90, position: 'insideLeft' }} />
                       <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
                       <Legend />
-                      <Bar dataKey="Buy to Live" fill="#4F46E5" />
-                      <Bar dataKey="Buy to Rent" fill="#10B981" />
-                      <Bar dataKey="Rent to Live" fill="#f59e0b" />
-                      <Bar dataKey="Stocks Only" fill="#8B5CF6" />
+                      <Bar dataKey="Own Your Home" fill="#4F46E5" />
+                      <Bar dataKey="Buy Rental Property" fill="#10B981" />
+                      <Bar dataKey="Rent & Invest More" fill="#f59e0b" />
+                      <Bar dataKey="Skip Homeownership" fill="#8B5CF6" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -766,22 +993,76 @@ const FinancialAnalyzer = () => {
                     Understand how each housing strategy affects your personal finances. See what percentage of your income goes to housing and how much you have left over each month.
                   </p>
                   
-                  <div className="bg-white p-6 rounded-xl shadow-sm mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Your Annual Income <InfoTooltip param="yearlyIncome" />
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl font-bold text-gray-600">$</span>
-                      <input
-                        type="number"
-                        value={params.yearlyIncome}
-                        onChange={(e) => updateParam('yearlyIncome', e.target.value)}
-                        className="text-3xl font-bold text-indigo-600 border-b-2 border-indigo-300 focus:border-indigo-600 outline-none bg-transparent w-full"
-                      />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Income & Taxes</h4>
+                      <div className="space-y-2">
+                        <div className="bg-indigo-50 p-3 rounded-lg">
+                          <p className="text-xs text-gray-600 mb-1">Annual Gross Income</p>
+                          <p className="text-2xl font-bold text-indigo-900">${formatCurrency(params.yearlyIncome)}</p>
+                        </div>
+                        <div className="space-y-1 text-sm text-gray-600 mt-3">
+                          <div className="flex justify-between">
+                            <span>Federal Income Tax:</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(calculations.taxes.federalTax)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>State Tax ({params.stateTaxRate}%):</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(calculations.taxes.stateTax)}</span>
+                          </div>
+                          <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-red-700">
+                            <span>Total Taxes:</span>
+                            <span>-${formatCurrency(calculations.taxes.totalTaxes)}</span>
+                          </div>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-lg mt-3">
+                          <p className="text-xs text-gray-600 mb-1">After-Tax Income</p>
+                          <p className="text-2xl font-bold text-green-700">${formatCurrency(calculations.taxes.afterTaxIncome)}</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Monthly: <span className="font-semibold">${formatCurrency(monthlyIncome)}</span>
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Effective Tax Rate: <span className="font-semibold">{calculations.taxes.effectiveTaxRate.toFixed(1)}%</span>
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">Edit in Parameters tab</p>
                     </div>
-                    <p className="text-sm text-gray-600 mt-2">
-                      Monthly income: <span className="font-semibold">${formatCurrency(monthlyIncome)}</span>
-                    </p>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Monthly Living Expenses</h4>
+                      <div className="space-y-1 text-sm text-gray-600">
+                        <div className="flex justify-between">
+                          <span>Groceries:</span>
+                          <span className="font-semibold">${formatCurrency(params.monthlyGroceries)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Transportation:</span>
+                          <span className="font-semibold">${formatCurrency(params.monthlyTransportation)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Insurance:</span>
+                          <span className="font-semibold">${formatCurrency(params.monthlyInsurance)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Utilities:</span>
+                          <span className="font-semibold">${formatCurrency(params.monthlyUtilities)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Subscriptions:</span>
+                          <span className="font-semibold">${formatCurrency(params.monthlySubscriptions)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Other:</span>
+                          <span className="font-semibold">${formatCurrency(params.monthlyOther)}</span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-gray-900">
+                          <span>Total Living Expenses:</span>
+                          <span>${formatCurrency(totalMonthlyLivingExpenses)}</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Edit these in the Parameters tab</p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -789,32 +1070,49 @@ const FinancialAnalyzer = () => {
                     <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-indigo-200">
                       <h4 className="font-semibold text-indigo-900 mb-4 text-lg flex items-center gap-2">
                         <Home className="w-5 h-5" />
-                        Buy to Live
+                        Own Your Home
                       </h4>
                       <div className="space-y-3">
-                        <div>
-                          <p className="text-sm text-gray-600">Monthly Payment</p>
-                          <p className="text-2xl font-bold text-red-600">
-                            -${formatCurrency(buyToLiveMonthlyPayment)}
-                          </p>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between text-gray-600">
+                            <span>Monthly Income:</span>
+                            <span className="font-semibold text-green-700">+${formatCurrency(monthlyIncome)}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-600">
+                            <span>Housing Cost:</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(buyToLiveMonthlyPayment)}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-600">
+                            <span>Living Expenses:</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(totalMonthlyLivingExpenses)}</span>
+                          </div>
+                          {calculations.buyToLive[0].monthlyDividendIncome > 0 && !params.dividendsReinvested && (
+                            <div className="flex justify-between text-gray-600">
+                              <span>Dividend Income:</span>
+                              <span className="font-semibold text-green-700">+${formatCurrency(calculations.buyToLive[0].monthlyDividendIncome)}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="pt-3 border-t">
-                          <p className="text-sm text-gray-600">% of Income</p>
+                          <p className="text-sm text-gray-600">Discretionary Income</p>
+                          <p className={`text-2xl font-bold ${calculations.buyToLive[0].monthlyLeftover >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {calculations.buyToLive[0].monthlyLeftover >= 0 ? '+' : ''}${formatCurrency(calculations.buyToLive[0].monthlyLeftover)}
+                          </p>
+                          {calculations.buyToLive[0].monthlyLeftover > 0 && (
+                            <p className="text-xs text-green-600 mt-1">✓ Automatically invested into stocks</p>
+                          )}
+                          {calculations.buyToLive[0].monthlyLeftover < 0 && (
+                            <p className="text-xs text-red-600 mt-1">⚠️ Spending more than you earn!</p>
+                          )}
+                        </div>
+                        <div className="pt-3 border-t">
+                          <p className="text-sm text-gray-600">Housing % of Income</p>
                           <p className={`text-xl font-bold ${buyToLivePercentOfIncome > 30 ? 'text-red-600' : 'text-green-600'}`}>
                             {buyToLivePercentOfIncome.toFixed(1)}%
                           </p>
                           {buyToLivePercentOfIncome > 30 && (
                             <p className="text-xs text-red-600 mt-1">⚠️ Above 30% recommended</p>
                           )}
-                        </div>
-                        <div className="pt-3 border-t">
-                          <p className="text-sm text-gray-600">Leftover Monthly</p>
-                          <p className="text-xl font-bold text-green-600">
-                            ${formatCurrency(buyToLiveLeftoverMonthly)}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">
-                            ${formatCurrency(buyToLiveLeftoverMonthly * 12)}/year
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -823,32 +1121,49 @@ const FinancialAnalyzer = () => {
                     <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-green-200">
                       <h4 className="font-semibold text-green-900 mb-4 text-lg flex items-center gap-2">
                         <Home className="w-5 h-5" />
-                        Rent to Live
+                        Rent & Invest More
                       </h4>
                       <div className="space-y-3">
-                        <div>
-                          <p className="text-sm text-gray-600">Monthly Rent</p>
-                          <p className="text-2xl font-bold text-red-600">
-                            -${formatCurrency(rentToLiveMonthlyPayment)}
-                          </p>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between text-gray-600">
+                            <span>Monthly Income:</span>
+                            <span className="font-semibold text-green-700">+${formatCurrency(monthlyIncome)}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-600">
+                            <span>Rent + Insurance:</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(rentToLiveMonthlyPayment)}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-600">
+                            <span>Living Expenses:</span>
+                            <span className="font-semibold text-red-600">-${formatCurrency(totalMonthlyLivingExpenses)}</span>
+                          </div>
+                          {calculations.rentToLive[0].monthlyDividendIncome > 0 && !params.dividendsReinvested && (
+                            <div className="flex justify-between text-gray-600">
+                              <span>Dividend Income:</span>
+                              <span className="font-semibold text-green-700">+${formatCurrency(calculations.rentToLive[0].monthlyDividendIncome)}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="pt-3 border-t">
-                          <p className="text-sm text-gray-600">% of Income</p>
+                          <p className="text-sm text-gray-600">Discretionary Income</p>
+                          <p className={`text-2xl font-bold ${calculations.rentToLive[0].monthlyLeftover >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {calculations.rentToLive[0].monthlyLeftover >= 0 ? '+' : ''}${formatCurrency(calculations.rentToLive[0].monthlyLeftover)}
+                          </p>
+                          {calculations.rentToLive[0].monthlyLeftover > 0 && (
+                            <p className="text-xs text-green-600 mt-1">✓ Automatically invested into stocks</p>
+                          )}
+                          {calculations.rentToLive[0].monthlyLeftover < 0 && (
+                            <p className="text-xs text-red-600 mt-1">⚠️ Spending more than you earn!</p>
+                          )}
+                        </div>
+                        <div className="pt-3 border-t">
+                          <p className="text-sm text-gray-600">Housing % of Income</p>
                           <p className={`text-xl font-bold ${rentToLivePercentOfIncome > 30 ? 'text-red-600' : 'text-green-600'}`}>
                             {rentToLivePercentOfIncome.toFixed(1)}%
                           </p>
                           {rentToLivePercentOfIncome > 30 && (
                             <p className="text-xs text-red-600 mt-1">⚠️ Above 30% recommended</p>
                           )}
-                        </div>
-                        <div className="pt-3 border-t">
-                          <p className="text-sm text-gray-600">Leftover Monthly</p>
-                          <p className="text-xl font-bold text-green-600">
-                            ${formatCurrency(rentToLiveLeftoverMonthly)}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">
-                            ${formatCurrency(rentToLiveLeftoverMonthly * 12)}/year
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -857,7 +1172,7 @@ const FinancialAnalyzer = () => {
                     <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-blue-200">
                       <h4 className="font-semibold text-blue-900 mb-4 text-lg flex items-center gap-2">
                         <DollarSign className="w-5 h-5" />
-                        Buy to Rent Out
+                        Buy Rental Property
                       </h4>
                       <div className="space-y-3">
                         <div>
@@ -892,19 +1207,19 @@ const FinancialAnalyzer = () => {
                       <p>
                         <strong>Most Cash Available:</strong>{' '}
                         {Math.max(buyToLiveLeftoverMonthly, rentToLiveLeftoverMonthly, buyToRentLeftoverMonthly) === buyToLiveLeftoverMonthly
-                          ? 'Buy to Live'
+                          ? 'Own Your Home'
                           : Math.max(rentToLiveLeftoverMonthly, buyToRentLeftoverMonthly) === rentToLiveLeftoverMonthly
-                          ? 'Rent to Live'
-                          : 'Buy to Rent'}{' '}
+                          ? 'Rent & Invest More'
+                          : 'Buy Rental Property'}{' '}
                         leaves you with the most monthly cash flow.
                       </p>
                       <p>
                         <strong>Lowest Housing Cost %:</strong>{' '}
                         {Math.min(buyToLivePercentOfIncome, rentToLivePercentOfIncome, buyToRentPercentOfIncome) === buyToLivePercentOfIncome
-                          ? 'Buy to Live'
+                          ? 'Own Your Home'
                           : Math.min(rentToLivePercentOfIncome, buyToRentPercentOfIncome) === rentToLivePercentOfIncome
-                          ? 'Rent to Live'
-                          : 'Buy to Rent'}{' '}
+                          ? 'Rent & Invest More'
+                          : 'Buy Rental Property'}{' '}
                         has the lowest cost as a percentage of your income.
                       </p>
                       <p className="pt-2 border-t border-indigo-200">
@@ -1277,7 +1592,170 @@ const FinancialAnalyzer = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-semibold text-lg text-purple-900 border-b-2 border-purple-200 pb-3">
+                  <h3 className="font-semibold text-lg text-teal-900 border-b-2 border-teal-200 pb-3">
+                    Income & Taxes
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Annual Income ($/year)
+                      <InfoTooltip param="yearlyIncome" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.yearlyIncome}
+                      onChange={(e) => updateParam('yearlyIncome', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      After-tax: ${formatCurrency(calculations.taxes.afterTaxIncome)}/year
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tax Filing Status
+                      <InfoTooltip param="filingStatus" />
+                    </label>
+                    <select
+                      value={params.filingStatus}
+                      onChange={(e) => setParams(prev => ({ ...prev, filingStatus: e.target.value }))}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-gray-900 font-medium"
+                    >
+                      <option value="single">Single</option>
+                      <option value="married">Married Filing Jointly</option>
+                      <option value="headOfHousehold">Head of Household</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      State Tax Rate (%)
+                      <InfoTooltip param="stateTaxRate" />
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={params.stateTaxRate}
+                      onChange={(e) => updateParam('stateTaxRate', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Use 0% for states with no income tax (FL, TX, WA, etc.)
+                    </p>
+                  </div>
+
+                  <div className="bg-teal-50 p-4 rounded-xl border border-teal-200">
+                    <p className="text-sm font-semibold text-teal-900">Tax Summary</p>
+                    <div className="text-xs text-gray-700 space-y-1 mt-2">
+                      <div className="flex justify-between">
+                        <span>Federal Income Tax:</span>
+                        <span className="font-semibold">${formatCurrency(calculations.taxes.federalTax)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>State Tax ({params.stateTaxRate}%):</span>
+                        <span className="font-semibold">${formatCurrency(calculations.taxes.stateTax)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-teal-300 font-bold">
+                        <span>Total Annual Taxes:</span>
+                        <span>${formatCurrency(calculations.taxes.totalTaxes)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-teal-700">
+                        <span>Effective Tax Rate:</span>
+                        <span>{calculations.taxes.effectiveTaxRate.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <h3 className="font-semibold text-lg text-orange-900 border-b-2 border-orange-200 pb-3 mt-8">
+                    Monthly Living Expenses
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Groceries ($/month)
+                      <InfoTooltip param="monthlyGroceries" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.monthlyGroceries}
+                      onChange={(e) => updateParam('monthlyGroceries', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Transportation ($/month)
+                      <InfoTooltip param="monthlyTransportation" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.monthlyTransportation}
+                      onChange={(e) => updateParam('monthlyTransportation', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Insurance ($/month)
+                      <InfoTooltip param="monthlyInsurance" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.monthlyInsurance}
+                      onChange={(e) => updateParam('monthlyInsurance', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Utilities ($/month)
+                      <InfoTooltip param="monthlyUtilities" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.monthlyUtilities}
+                      onChange={(e) => updateParam('monthlyUtilities', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Subscriptions ($/month)
+                      <InfoTooltip param="monthlySubscriptions" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.monthlySubscriptions}
+                      onChange={(e) => updateParam('monthlySubscriptions', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Other Expenses ($/month)
+                      <InfoTooltip param="monthlyOther" />
+                    </label>
+                    <input
+                      type="number"
+                      value={params.monthlyOther}
+                      onChange={(e) => updateParam('monthlyOther', e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-gray-900 font-medium"
+                    />
+                  </div>
+
+                  <div className="bg-orange-50 p-4 rounded-xl border border-orange-200">
+                    <p className="text-sm font-semibold text-orange-900">Total Living Expenses</p>
+                    <p className="text-2xl font-bold text-orange-800">${formatCurrency(totalMonthlyLivingExpenses)}/month</p>
+                    <p className="text-xs text-gray-600 mt-1">${formatCurrency(totalMonthlyLivingExpenses * 12)}/year</p>
+                  </div>
+
+                  <h3 className="font-semibold text-lg text-purple-900 border-b-2 border-purple-200 pb-3 mt-8">
                     Investment & Timeline
                   </h3>
 
@@ -1370,14 +1848,20 @@ const FinancialAnalyzer = () => {
                         <>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Contribution Amount ($)
+                              Contribution Amount ($/month)
                             </label>
                             <input
                               type="number"
                               value={params.contributionAmount}
                               onChange={(e) => updateParam('contributionAmount', e.target.value)}
+                              max={calculations.taxes.monthlyAfterTaxIncome - calculations.livingExpenses.monthlyTotal}
                               className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
                             />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Max available: ${formatCurrency(Math.max(0, calculations.taxes.monthlyAfterTaxIncome - calculations.livingExpenses.monthlyTotal))}/month
+                              <br/>
+                              (After-tax income - Living expenses)
+                            </p>
                           </div>
 
                           <div>
@@ -1446,10 +1930,10 @@ const FinancialAnalyzer = () => {
                         <YAxis tickFormatter={(value) => `$${formatCurrency(value)}`} />
                         <Tooltip formatter={(value) => `$${formatCurrency(value)}`} />
                         <Legend />
-                        <Line type="monotone" dataKey="Buy to Live" stroke="#4F46E5" strokeWidth={2} />
-                        <Line type="monotone" dataKey="Buy to Rent" stroke="#10B981" strokeWidth={2} />
-                        <Line type="monotone" dataKey="Rent to Live" stroke="#f59e0b" strokeWidth={2} />
-                        <Line type="monotone" dataKey="Stocks Only" stroke="#8B5CF6" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Own Your Home" stroke="#4F46E5" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Buy Rental Property" stroke="#10B981" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Rent & Invest More" stroke="#f59e0b" strokeWidth={2} />
+                        <Line type="monotone" dataKey="Skip Homeownership" stroke="#8B5CF6" strokeWidth={2} />
                         </LineChart>
                     </ResponsiveContainer>
                     </div>
