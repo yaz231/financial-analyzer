@@ -430,8 +430,11 @@ const FinancialAnalyzer = () => {
       }
 
       const netWorthStocks = stockValueOnly + contributionsAccumulated + dividendsAccumulated;
-      const monthlyCashFlowStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 
-      (params.enableRecurringContributions ? -params.contributionAmount : 0);
+      // Calculate net monthly cash flow for Stocks Only
+      // Cash Flow = Income + Dividends - Living Expenses - Recurring Contributions
+      const monthlyDividendIncomeStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 0;
+      const monthlyRecurringContribution = params.enableRecurringContributions ? params.contributionAmount : 0;
+      const monthlyCashFlowStocks = monthlyIncome + monthlyDividendIncomeStocks - totalMonthlyLivingExpenses - monthlyRecurringContribution;
 
       // RENT TO LIVE (NEW SCENARIO)
       const currentRentToLive = params.monthlyRentToLive * Math.pow(1 + params.rentToLiveGrowth / 100, year);
@@ -482,10 +485,10 @@ const FinancialAnalyzer = () => {
       // Calculate total stock value for Rent to Live
       const stocksFromRenting = stocksFromRentingBase + monthlyContributionsRent + rentToLiveDividendsAccumulated;
 
-      // Calculate net monthly cash flow
-      // If dividends are not reinvested, they offset the rent cost
+      // Calculate net monthly cash flow for Rent & Invest More
+      // Cash Flow = Income + Dividends - Rent - Living Expenses
       const monthlyDividendIncomeRent = !params.dividendsReinvested ? (rentToLiveAnnualDividendIncome / 12) : 0;
-      const netMonthlyCashFlowRent = -monthlyRentCost + monthlyDividendIncomeRent;
+      const netMonthlyCashFlowRent = monthlyIncome + monthlyDividendIncomeRent - monthlyRentCost - totalMonthlyLivingExpenses;
   
       results.stocksOnly.push({
         year,
@@ -496,9 +499,10 @@ const FinancialAnalyzer = () => {
         monthlyCashFlow: monthlyCashFlowStocks
       });
         
-      // Net monthly cash flow for Buy to Live: housing cost offset by dividends (if not reinvested)
+      // Net monthly cash flow for Buy to Live
+      // Cash Flow = Income + Dividends - Housing - Living Expenses
       const monthlyDividendOffsetLive = !params.dividendsReinvested ? (annualDividendIncomeLive / 12) : 0;
-      const netMonthlyCashFlowLive = -monthlyHousingCost + monthlyDividendOffsetLive;
+      const netMonthlyCashFlowLive = monthlyIncome + monthlyDividendOffsetLive - monthlyHousingCost - totalMonthlyLivingExpenses;
 
       results.buyToLive.push({
         year,
@@ -518,6 +522,11 @@ const FinancialAnalyzer = () => {
         netMonthlyCashFlow: netMonthlyCashFlowLive
       });
 
+      // Calculate net monthly cash flow for Buy Rental Property
+      // Cash Flow = Income + Rental Net Income - Living Expenses
+      // Note: Personal housing cost not included (assumed living with family or included in living expenses)
+      const netMonthlyCashFlowBuyToRent = monthlyIncome + monthlyCashFlow - totalMonthlyLivingExpenses;
+
       results.buyToRent.push({
         year,
         netWorth: netWorthRent,
@@ -531,7 +540,7 @@ const FinancialAnalyzer = () => {
         monthlyCashFlow,
         turnoverCosts,
         taxBenefit: taxBenefitRent,
-        netMonthlyCashFlow: Math.round(monthlyCashFlow)
+        netMonthlyCashFlow: Math.round(netMonthlyCashFlowBuyToRent)
       });
 
       results.rentToLive.push({
@@ -580,10 +589,10 @@ const FinancialAnalyzer = () => {
   const cashFlowChartData = useMemo(() => {
     return calculations.buyToLive.slice(0, Math.min(36, params.yearsToAnalyze + 1)).map((item, idx) => ({
       year: item.year,
-      'Own Your Home': -Math.round(item.monthlyPayment),
-      'Buy Rental Property': Math.round(calculations.buyToRent[idx].monthlyCashFlow),
-      'Rent & Invest More': -Math.round(calculations.rentToLive[idx].monthlyRentCost),
-      'Skip Homeownership': calculations.stocksOnly[idx].monthlyCashFlow
+      'Own Your Home': Math.round(item.netMonthlyCashFlow),
+      'Buy Rental Property': Math.round(calculations.buyToRent[idx].netMonthlyCashFlow),
+      'Rent & Invest More': Math.round(calculations.rentToLive[idx].monthlyCashFlow),
+      'Skip Homeownership': Math.round(calculations.stocksOnly[idx].monthlyCashFlow)
     }));
   }, [calculations, params.yearsToAnalyze]);
 
@@ -1839,14 +1848,20 @@ const FinancialAnalyzer = () => {
                         <>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Contribution Amount ($)
+                              Contribution Amount ($/month)
                             </label>
                             <input
                               type="number"
                               value={params.contributionAmount}
                               onChange={(e) => updateParam('contributionAmount', e.target.value)}
+                              max={calculations.taxes.monthlyAfterTaxIncome - calculations.livingExpenses.monthlyTotal}
                               className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-gray-900 font-medium"
                             />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Max available: ${formatCurrency(Math.max(0, calculations.taxes.monthlyAfterTaxIncome - calculations.livingExpenses.monthlyTotal))}/month
+                              <br/>
+                              (After-tax income - Living expenses)
+                            </p>
                           </div>
 
                           <div>
