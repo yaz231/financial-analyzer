@@ -3,13 +3,74 @@
 import React, { useState, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Calculator, TrendingUp, Home, DollarSign, Info, Settings, HelpCircle, Wallet, Trophy, CheckCircle, Lightbulb, AlertTriangle, AlertCircle, ChevronDown } from 'lucide-react';
-import { calculateAllStrategies, calculateMortgagePayment, calculateRemainingBalance } from '../utils/calculations';
-import { formatCurrency, formatStrategyName } from '../utils/formatters';
-import { DEFAULT_PARAMS } from '../utils/constants';
-import MathTooltip from './financial/shared/MathTooltip';
 
 const FinancialAnalyzer = () => {
-  const [params, setParams] = useState(DEFAULT_PARAMS);
+  const [params, setParams] = useState({
+    // Property parameters
+    housePrice: 300000,
+    downPaymentPercent: 20,
+    mortgageRate: 5.0,
+    loanTermYears: 30,
+    propertyTaxRate: 1.9,
+    homeInsurance: 417,
+    hoaFees: 100,
+    homeAppreciation: 4.0,
+    maintenancePercent: 1.0,
+    
+    // PMI
+    pmiRate: 0.5,
+    pmiThreshold: 20,
+    
+    // Rental parameters
+    useRentPercentage: true,
+    rentPercentage: 8.0,
+    monthlyRentFixed: 2400,
+    vacancyRate: 7,
+    propertyManagementPercent: 8,
+    rentGrowth: 3.0,
+    landlordInsurancePremium: 20,
+    maintenanceRental: 3.0,
+    capexReserve: 8.0,
+    turnoverCostMonths: 2,
+    avgTenancyYears: 3,
+    
+    // Stock investment
+    stockReturn: 7.5,
+    dividendYield: 2.0,
+    dividendsReinvested: true,
+    
+    // Recurring contributions
+    enableRecurringContributions: false,
+    contributionAmount: 500,
+    contributionFrequency: 'monthly',
+    
+    // Timeline
+    yearsToAnalyze: 30,
+    initialCash: 60000,
+
+    // Tax parameters
+    enableTaxBenefits: false,
+    marginalTaxRate: 24,
+    standardDeduction: 29200, // 2024 married filing jointly
+    itemizedDeductions: 0,
+    landValuePercent: 20,
+
+    yearlyIncome: 75000,
+    filingStatus: 'single', // 'single', 'married', 'headOfHousehold'
+    stateTaxRate: 5.0, // State income tax as percentage
+
+    // Monthly living expenses
+    monthlyGroceries: 400,
+    monthlyTransportation: 200,
+    monthlyInsurance: 150, // car, health premiums not covered by employer
+    monthlyUtilities: 150,
+    monthlySubscriptions: 50, // gym, streaming, etc.
+    monthlyOther: 200, // dining out, entertainment, misc
+
+    monthlyRentToLive: 1800,
+    renterInsurance: 25,
+    rentToLiveGrowth: 3.0,
+  });
 
   const [showExplanations, setShowExplanations] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -79,13 +140,476 @@ const FinancialAnalyzer = () => {
     </div>
   );
 
+  const MathTooltip = ({ id, title, lines, note }) => {
+    const [isHovered, setIsHovered] = useState(false);
+
+    return (
+      <div className="relative inline-block group">
+        <Calculator
+          className="w-4 h-4 text-gray-400 hover:text-indigo-600 cursor-help ml-2 inline-block transition"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        />
+        {isHovered && (
+          <div className="absolute z-50 w-80 p-4 bg-gray-900 text-white text-sm rounded-lg shadow-2xl -top-2 left-6">
+            <div className="absolute w-2 h-2 bg-gray-900 transform rotate-45 -left-1 top-3"></div>
+            <p className="font-semibold mb-2 text-indigo-300">{title}</p>
+            <div className="space-y-1">
+              {lines.map((line, idx) => (
+                <div key={idx} className={`flex justify-between ${line.isBorder ? 'border-t border-gray-600 pt-1 mt-1' : ''}`}>
+                  <span className={line.isTotal ? 'font-semibold' : ''}>{line.label}</span>
+                  <span className={`font-mono ${line.isPositive ? 'text-green-400' : line.isNegative ? 'text-red-400' : line.isTotal ? 'font-semibold text-white' : 'text-gray-300'}`}>
+                    {line.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {note && (
+              <p className="text-xs text-gray-400 mt-3 italic">{note}</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const updateParam = (key, value) => {
     setParams(prev => ({ ...prev, [key]: typeof value === 'boolean' ? value : (parseFloat(value) || 0) }));
   };
 
-  // Use the refactored calculation utilities
+  const calculateMortgagePayment = (principal, annualRate, years) => {
+    const monthlyRate = annualRate / 100 / 12;
+    const numPayments = years * 12;
+    if (monthlyRate === 0) return principal / numPayments;
+    return principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / 
+           (Math.pow(1 + monthlyRate, numPayments) - 1);
+  };
+
+  const calculateRemainingBalance = (principal, annualRate, totalMonths, monthsPaid) => {
+    if (monthsPaid >= totalMonths) return 0;
+    const monthlyRate = annualRate / 100 / 12;
+    const remaining = principal * (Math.pow(1 + monthlyRate, totalMonths) - Math.pow(1 + monthlyRate, monthsPaid)) /
+                     (Math.pow(1 + monthlyRate, totalMonths) - 1);
+    return Math.max(0, remaining);
+  };
+
+  const calculateIncomeTaxes = (grossIncome, filingStatus) => {
+    // 2024 Federal Tax Brackets (from IRS.gov)
+    const brackets = {
+      single: [
+        { limit: 11600, rate: 0.10 },
+        { limit: 47150, rate: 0.12 },
+        { limit: 100525, rate: 0.22 },
+        { limit: 191950, rate: 0.24 },
+        { limit: 243725, rate: 0.32 },
+        { limit: 609350, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ],
+      married: [
+        { limit: 23200, rate: 0.10 },
+        { limit: 94300, rate: 0.12 },
+        { limit: 201050, rate: 0.22 },
+        { limit: 383900, rate: 0.24 },
+        { limit: 487450, rate: 0.32 },
+        { limit: 731200, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ],
+      headOfHousehold: [
+        { limit: 16550, rate: 0.10 },
+        { limit: 63100, rate: 0.12 },
+        { limit: 100500, rate: 0.22 },
+        { limit: 191950, rate: 0.24 },
+        { limit: 243700, rate: 0.32 },
+        { limit: 609350, rate: 0.35 },
+        { limit: Infinity, rate: 0.37 }
+      ]
+    };
+
+    const selectedBrackets = brackets[filingStatus] || brackets.single;
+
+    let federalTax = 0;
+    let remainingIncome = grossIncome;
+    let previousLimit = 0;
+
+    for (const bracket of selectedBrackets) {
+      if (remainingIncome <= 0) break;
+
+      const taxableInBracket = Math.min(remainingIncome, bracket.limit - previousLimit);
+      federalTax += taxableInBracket * bracket.rate;
+      remainingIncome -= taxableInBracket;
+      previousLimit = bracket.limit;
+    }
+
+    return {
+      federalTax
+    };
+  };
+
   const calculations = useMemo(() => {
-    return calculateAllStrategies(params);
+    const downPayment = params.housePrice * (params.downPaymentPercent / 100);
+    const loanAmount = params.housePrice - downPayment;
+    const monthlyMortgage = calculateMortgagePayment(loanAmount, params.mortgageRate, params.loanTermYears);
+    const monthlyPropertyTax = (params.housePrice * (params.propertyTaxRate / 100)) / 12;
+    const monthlyMaintenance = (params.housePrice * (params.maintenancePercent / 100)) / 12;
+
+    const needsPMI = params.downPaymentPercent < params.pmiThreshold;
+    const monthlyPMI = needsPMI ? (loanAmount * (params.pmiRate / 100)) / 12 : 0;
+
+    // Calculate taxes and after-tax income
+    const taxes = calculateIncomeTaxes(params.yearlyIncome, params.filingStatus);
+    const stateTax = params.yearlyIncome * (params.stateTaxRate / 100);
+    const totalAnnualTaxes = taxes.federalTax + stateTax;
+    const afterTaxIncome = params.yearlyIncome - totalAnnualTaxes;
+    const monthlyIncome = afterTaxIncome / 12;
+
+    // Calculate living expenses
+    const totalMonthlyLivingExpenses = params.monthlyGroceries + params.monthlyTransportation +
+                                        params.monthlyInsurance + params.monthlyUtilities +
+                                        params.monthlySubscriptions + params.monthlyOther;
+
+    const results = {
+      buyToLive: [],
+      buyToRent: [],
+      stocksOnly: [],
+      rentToLive: [],
+    };
+
+    let cumulativeTaxBenefitsLive = 0;
+    let cumulativeTaxBenefitsRent = 0;
+
+    for (let year = 0; year <= params.yearsToAnalyze; year++) {
+      const month = year * 12;
+      const homeValue = params.housePrice * Math.pow(1 + params.homeAppreciation / 100, year);
+      const remainingMortgage = calculateRemainingBalance(loanAmount, params.mortgageRate, params.loanTermYears * 12, month);
+      
+      const equityPercent = ((homeValue - remainingMortgage) / homeValue) * 100;
+      const currentPMI = (needsPMI && equityPercent < params.pmiThreshold) ? monthlyPMI : 0;
+
+      // TAX BENEFITS CALCULATION
+      let taxBenefitLive = 0;
+      let taxBenefitRent = 0;
+
+      if (params.enableTaxBenefits && year > 0) {
+        // BUY TO LIVE: Mortgage Interest Deduction
+        const principalPaidLive = loanAmount - remainingMortgage - 
+            calculateRemainingBalance(loanAmount, params.mortgageRate, params.loanTermYears * 12, (year - 1) * 12);
+        const interestPaidLive = (monthlyMortgage * 12) - principalPaidLive;
+        const propertyTaxAnnual = monthlyPropertyTax * 12;
+        const totalItemized = interestPaidLive + propertyTaxAnnual;
+        
+        if (totalItemized > params.standardDeduction) {
+            taxBenefitLive = (totalItemized - params.standardDeduction) * (params.marginalTaxRate / 100);
+        }
+        
+        // BUY TO RENT: Depreciation + Expense Deductions
+        const buildingValue = params.housePrice * (1 - params.landValuePercent / 100);
+        const annualDepreciation = buildingValue / 27.5;
+        
+        const annualRentalIncome = netMonthlyRent * 12;
+        const annualRentalExpenses = monthlyExpenses * 12;
+        const netRentalIncome = annualRentalIncome - annualRentalExpenses - annualDepreciation;
+    
+        if (netRentalIncome < 0) {
+            taxBenefitRent = Math.min(Math.abs(netRentalIncome), 25000) * (params.marginalTaxRate / 100);
+        } else {
+            taxBenefitRent = annualDepreciation * (params.marginalTaxRate / 100);
+        }
+      }
+
+      cumulativeTaxBenefitsLive += taxBenefitLive;
+      cumulativeTaxBenefitsRent += taxBenefitRent;
+
+      // BUY TO LIVE
+      const homeEquityLive = homeValue - remainingMortgage;
+      const monthlyHousingCost = monthlyMortgage + currentPMI + monthlyPropertyTax +
+                                params.homeInsurance + params.hoaFees + monthlyMaintenance;
+
+      // Calculate leftover income that can be invested monthly
+      const monthlyLeftoverLive = monthlyIncome - monthlyHousingCost - totalMonthlyLivingExpenses;
+
+      // Initial stock investment from down payment
+      const initialStockInvestmentLive = params.initialCash - downPayment;
+      let stockValueLive = initialStockInvestmentLive * Math.pow(1 + params.stockReturn / 100, year);
+
+      // Add monthly contributions from leftover income
+      let monthlyContributionsLive = 0;
+      let dividendsLive = 0;
+      let annualDividendIncomeLive = 0;
+
+      if (year > 0 && monthlyLeftoverLive > 0) {
+        const annualContribution = monthlyLeftoverLive * 12;
+        for (let y = 1; y <= year; y++) {
+          const yearsToGrow = year - y;
+          monthlyContributionsLive += annualContribution * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+        }
+      }
+
+      // Calculate dividends from the entire portfolio (initial + contributions)
+      if (params.dividendYield > 0 && year > 0) {
+        for (let y = 1; y <= year; y++) {
+          const contributionsSoFar = monthlyLeftoverLive > 0 ? monthlyLeftoverLive * 12 * y : 0;
+          const baseValueAtYear = initialStockInvestmentLive * Math.pow(1 + params.stockReturn / 100, y);
+          const contributionsToYear = contributionsSoFar * Math.pow(1 + params.stockReturn / 100, y - Math.floor(y/2));
+          const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
+
+          const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
+          const yearsToGrow = year - y;
+
+          if (params.dividendsReinvested) {
+            dividendsLive += dividendAtYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+          } else {
+            dividendsLive += dividendAtYear;
+          }
+
+          if (y === year) {
+            annualDividendIncomeLive = dividendAtYear;
+          }
+        }
+      }
+
+      const totalStockValueLive = stockValueLive + monthlyContributionsLive + dividendsLive;
+      const netWorthLive = homeEquityLive + totalStockValueLive + cumulativeTaxBenefitsLive;
+
+
+      // BUY TO RENT
+      const homeEquityRent = homeValue - remainingMortgage;
+      const monthlyRent = params.useRentPercentage ? 
+        (params.housePrice * (params.rentPercentage / 100) / 12) * Math.pow(1 + params.rentGrowth / 100, year) :
+        params.monthlyRentFixed * Math.pow(1 + params.rentGrowth / 100, year);
+      
+      const effectiveRent = monthlyRent * (1 - params.vacancyRate / 100);
+      const propertyManagementFee = effectiveRent * (params.propertyManagementPercent / 100);
+      
+      const landlordInsurance = params.homeInsurance * (1 + params.landlordInsurancePremium / 100);
+      const rentalMaintenance = monthlyRent * (params.maintenanceRental / 100);
+      const capexReserve = monthlyRent * (params.capexReserve / 100);
+      
+      const monthlyExpenses = monthlyMortgage + currentPMI + monthlyPropertyTax + 
+                             landlordInsurance + params.hoaFees + rentalMaintenance + capexReserve;
+      
+      const netMonthlyRent = effectiveRent - propertyManagementFee;
+      const monthlyCashFlow = netMonthlyRent - monthlyExpenses;
+      
+      let rentalProfitsInvested = 0;
+      let turnoverCosts = 0;
+      
+      if (year > 0) {
+        for (let y = 1; y <= year; y++) {
+          const rentAtYear = params.useRentPercentage ?
+            (params.housePrice * (params.rentPercentage / 100) / 12) * Math.pow(1 + params.rentGrowth / 100, y) :
+            params.monthlyRentFixed * Math.pow(1 + params.rentGrowth / 100, y);
+          
+          const effectiveRentAtYear = rentAtYear * (1 - params.vacancyRate / 100);
+          const managementAtYear = effectiveRentAtYear * (params.propertyManagementPercent / 100);
+          const netRentAtYear = effectiveRentAtYear - managementAtYear;
+          
+          const maintenanceAtYear = rentAtYear * (params.maintenanceRental / 100);
+          const capexAtYear = rentAtYear * (params.capexReserve / 100);
+          const expensesAtYear = monthlyMortgage + monthlyPropertyTax + landlordInsurance + 
+                                params.hoaFees + maintenanceAtYear + capexAtYear;
+          
+          const cashFlowAtYear = (netRentAtYear - expensesAtYear) * 12;
+          
+          const annualizedTurnoverCost = (rentAtYear * params.turnoverCostMonths) / params.avgTenancyYears;
+
+        const yearsOfGrowth = year - y;
+        const profitAfterTurnover = cashFlowAtYear - annualizedTurnoverCost;
+        rentalProfitsInvested += profitAfterTurnover * Math.pow(1 + params.stockReturn / 100, yearsOfGrowth);
+        }
+      }
+      
+      const initialStockInvestmentRent = params.initialCash - downPayment;
+      const stockValueRent = initialStockInvestmentRent * Math.pow(1 + params.stockReturn / 100, year);
+      const totalStocksRent = stockValueRent + rentalProfitsInvested;
+      const netWorthRent = homeEquityRent + totalStocksRent + cumulativeTaxBenefitsRent;
+
+      // STOCKS ONLY (with optional DCA)
+      let stockValueOnly = params.initialCash * Math.pow(1 + params.stockReturn / 100, year);
+      let contributionsAccumulated = 0;
+      let dividendsAccumulated = 0;
+      let annualDividendIncome = 0;
+
+      // Add recurring contributions if enabled
+      if (params.enableRecurringContributions && year > 0) {
+        const contributionsPerYear = params.contributionFrequency === 'monthly' ? 
+            params.contributionAmount * 12 : params.contributionAmount;
+        
+        for (let y = 1; y <= year; y++) {
+            const yearsToGrow = year - y;
+            contributionsAccumulated += contributionsPerYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+        }
+      }
+
+      // Calculate dividends
+      if (params.dividendYield > 0 && year > 0) {
+        for (let y = 1; y <= year; y++) {
+            const contributionsSoFar = params.enableRecurringContributions ? 
+            (params.contributionFrequency === 'monthly' ? params.contributionAmount * 12 : params.contributionAmount) * y : 0;
+
+            const baseValueAtYear = params.initialCash * Math.pow(1 + params.stockReturn / 100, y);
+            const contributionsToYear = contributionsSoFar * Math.pow(1 + params.stockReturn / 100, y - Math.floor(y/2));
+            const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
+    
+            const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
+            const yearsToGrow = year - y;
+            
+            if (params.dividendsReinvested) {
+            dividendsAccumulated += dividendAtYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+            } else {
+            dividendsAccumulated += dividendAtYear;
+            }
+    
+            if (y === year) {
+            annualDividendIncome = dividendAtYear;
+            }
+        }
+      }
+
+      const netWorthStocks = stockValueOnly + contributionsAccumulated + dividendsAccumulated;
+      // Calculate net monthly cash flow for Stocks Only
+      // Cash Flow = Income + Dividends - Living Expenses - Recurring Contributions
+      const monthlyDividendIncomeStocks = !params.dividendsReinvested ? annualDividendIncome / 12 : 0;
+      const monthlyRecurringContribution = params.enableRecurringContributions ? params.contributionAmount : 0;
+      const monthlyCashFlowStocks = monthlyIncome + monthlyDividendIncomeStocks - totalMonthlyLivingExpenses - monthlyRecurringContribution;
+
+      // RENT TO LIVE (NEW SCENARIO)
+      const currentRentToLive = params.monthlyRentToLive * Math.pow(1 + params.rentToLiveGrowth / 100, year);
+      const monthlyRentCost = currentRentToLive + params.renterInsurance;
+
+      // Calculate leftover income that can be invested monthly
+      const monthlyLeftoverRent = monthlyIncome - monthlyRentCost - totalMonthlyLivingExpenses;
+
+      // All initial cash goes into stocks
+      let stocksFromRentingBase = params.initialCash * Math.pow(1 + params.stockReturn / 100, year);
+
+      // Add monthly contributions from leftover income
+      let monthlyContributionsRent = 0;
+      if (year > 0 && monthlyLeftoverRent > 0) {
+        const annualContribution = monthlyLeftoverRent * 12;
+        for (let y = 1; y <= year; y++) {
+          const yearsToGrow = year - y;
+          monthlyContributionsRent += annualContribution * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+        }
+      }
+
+      // Calculate dividends for Rent to Live portfolio (from initial + contributions)
+      let rentToLiveDividendsAccumulated = 0;
+      let rentToLiveAnnualDividendIncome = 0;
+
+      if (params.dividendYield > 0 && year > 0) {
+        for (let y = 1; y <= year; y++) {
+          const contributionsSoFar = monthlyLeftoverRent > 0 ? monthlyLeftoverRent * 12 * y : 0;
+          const baseValueAtYear = params.initialCash * Math.pow(1 + params.stockReturn / 100, y);
+          const contributionsToYear = contributionsSoFar * Math.pow(1 + params.stockReturn / 100, y - Math.floor(y/2));
+          const portfolioValueAtYear = baseValueAtYear + contributionsToYear;
+
+          const dividendAtYear = portfolioValueAtYear * (params.dividendYield / 100);
+          const yearsToGrow = year - y;
+
+          if (params.dividendsReinvested) {
+            rentToLiveDividendsAccumulated += dividendAtYear * Math.pow(1 + params.stockReturn / 100, yearsToGrow);
+          } else {
+            rentToLiveDividendsAccumulated += dividendAtYear;
+          }
+
+          if (y === year) {
+            rentToLiveAnnualDividendIncome = dividendAtYear;
+          }
+        }
+      }
+
+      // Calculate total stock value for Rent to Live
+      const stocksFromRenting = stocksFromRentingBase + monthlyContributionsRent + rentToLiveDividendsAccumulated;
+
+      // Calculate net monthly cash flow for Rent & Invest More
+      // Cash Flow = Income + Dividends - Rent - Living Expenses
+      const monthlyDividendIncomeRent = !params.dividendsReinvested ? (rentToLiveAnnualDividendIncome / 12) : 0;
+      const netMonthlyCashFlowRent = monthlyIncome + monthlyDividendIncomeRent - monthlyRentCost - totalMonthlyLivingExpenses;
+  
+      results.stocksOnly.push({
+        year,
+        netWorth: netWorthStocks,
+        stockValue: stockValueOnly,
+        contributions: contributionsAccumulated,
+        dividends: dividendsAccumulated,
+        monthlyCashFlow: monthlyCashFlowStocks
+      });
+        
+      // Net monthly cash flow for Buy to Live
+      // Cash Flow = Income + Dividends - Housing - Living Expenses
+      const monthlyDividendOffsetLive = !params.dividendsReinvested ? (annualDividendIncomeLive / 12) : 0;
+      const netMonthlyCashFlowLive = monthlyIncome + monthlyDividendOffsetLive - monthlyHousingCost - totalMonthlyLivingExpenses;
+
+      results.buyToLive.push({
+        year,
+        netWorth: netWorthLive,
+        homeEquity: homeEquityLive,
+        stockValue: totalStockValueLive,
+        stockValueBase: stockValueLive,
+        monthlyContributions: monthlyContributionsLive,
+        dividends: dividendsLive,
+        homeValue,
+        remainingMortgage,
+        monthlyPayment: monthlyHousingCost,
+        monthlyPMI: currentPMI,
+        taxBenefit: taxBenefitLive,
+        monthlyLeftover: monthlyLeftoverLive,
+        monthlyDividendIncome: annualDividendIncomeLive / 12,
+        netMonthlyCashFlow: netMonthlyCashFlowLive
+      });
+
+      // Calculate net monthly cash flow for Buy Rental Property
+      // Cash Flow = Income + Rental Net Income - Living Expenses
+      // Note: Personal housing cost not included (assumed living with family or included in living expenses)
+      const netMonthlyCashFlowBuyToRent = monthlyIncome + monthlyCashFlow - totalMonthlyLivingExpenses;
+
+      results.buyToRent.push({
+        year,
+        netWorth: netWorthRent,
+        homeEquity: homeEquityRent,
+        stockValue: totalStocksRent,
+        rentalProfits: rentalProfitsInvested,
+        homeValue,
+        remainingMortgage,
+        monthlyRent: netMonthlyRent,
+        monthlyExpenses,
+        monthlyCashFlow,
+        turnoverCosts,
+        taxBenefit: taxBenefitRent,
+        netMonthlyCashFlow: Math.round(netMonthlyCashFlowBuyToRent)
+      });
+
+      results.rentToLive.push({
+        year,
+        netWorth: stocksFromRenting,
+        stockValue: stocksFromRenting,
+        stockValueBase: stocksFromRentingBase,
+        monthlyContributions: monthlyContributionsRent,
+        dividends: rentToLiveDividendsAccumulated,
+        monthlyRent: currentRentToLive,
+        monthlyRentCost: monthlyRentCost,
+        monthlyLeftover: monthlyLeftoverRent,
+        monthlyDividendIncome: monthlyDividendIncomeRent,
+        monthlyCashFlow: netMonthlyCashFlowRent
+      });
+    }
+
+    return {
+      ...results,
+      taxes: {
+        grossIncome: params.yearlyIncome,
+        federalTax: taxes.federalTax,
+        stateTax: stateTax,
+        totalTaxes: totalAnnualTaxes,
+        afterTaxIncome: afterTaxIncome,
+        monthlyAfterTaxIncome: monthlyIncome,
+        effectiveTaxRate: (totalAnnualTaxes / params.yearlyIncome) * 100
+      },
+      livingExpenses: {
+        monthlyTotal: totalMonthlyLivingExpenses,
+        annualTotal: totalMonthlyLivingExpenses * 12
+      }
+    };
   }, [params]);
 
   const netWorthChartData = useMemo(() => {
